@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="landing-body">
+    <div class="landing-container">
+
+        <div class="landing-logo">
+            <div class="landing-logo-mark">T</div>
+            <h1 class="landing-title">Sistema TUI</h1>
+            <p class="landing-subtitle">Controle de produção e estoque</p>
+        </div>
+
+        <nav class="landing-nav">
+            <a href="{{ url_for('producao') }}" class="landing-nav-btn btn-nav-producao">
+                <span class="landing-nav-icon">🏭</span>
+                <span class="landing-nav-text">
+                    <span class="landing-nav-label">Painel de Produção</span>
+                    <span class="landing-nav-desc">Registrar embalagens, assistências e logs</span>
+                </span>
+                <span class="landing-nav-arrow">›</span>
+            </a>
+
+            <a href="{{ url_for('estoque_geral') }}" class="landing-nav-btn btn-nav-estoque">
+                <span class="landing-nav-icon">📦</span>
+                <span class="landing-nav-text">
+                    <span class="landing-nav-label">Estoque</span>
+                    <span class="landing-nav-desc">Visão geral por modelo e cor</span>
+                </span>
+                <span class="landing-nav-arrow">›</span>
+            </a>
+
+            <a href="{{ url_for('saidas') }}" class="landing-nav-btn btn-nav-saidas">
+                <span class="landing-nav-icon">🚚</span>
+                <span class="landing-nav-text">
+                    <span class="landing-nav-label">Registrar Saída</span>
+                    <span class="landing-nav-desc">CPF, CNPJ, Feira ou Presente</span>
+                </span>
+                <span class="landing-nav-arrow">›</span>
+            </a>
+
+            <a href="{{ url_for('pecas.listar_pecas') }}" class="landing-nav-btn">
+                <span class="landing-nav-icon">🔧</span>
+                <span class="landing-nav-text">
+                    <span class="landing-nav-label">Peças</span>
+                    <span class="landing-nav-desc">Estoque, entradas, saídas e defeitos</span>
+                </span>
+                <span class="landing-nav-arrow">›</span>
+            </a>
+        </nav>
+
+        <p class="landing-footer">Rede interna &bull; Atualizado em tempo real</p>
+    </div>
+</body>
+</html>

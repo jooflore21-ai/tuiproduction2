@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Saídas — TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="page-header-title">
+            Registro de Saídas
+            <span class="badge">TUI</span>
+        </div>
+        <div class="page-nav-links">
+            <a href="{{ url_for('producao') }}">Produção</a>
+            <a href="{{ url_for('estoque_geral') }}">Estoque</a>
+            <a href="{{ url_for('pecas.listar_pecas') }}">Peças</a>
+            <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <form id="saida-form" method="POST">
+            <h2>Registrar Saída de Estoque</h2>
+
+            <div style="padding: 0 20px 20px;">
+
+                <div class="form-group" style="margin-top:16px;">
+                    <label>Motivo</label>
+                    <div id="motivo-group" class="button-group">
+                        <button type="button" class="btn active" data-value="CPF">CPF</button>
+                        <button type="button" class="btn" data-value="CNPJ">CNPJ</button>
+                        <button type="button" class="btn" data-value="FEIRA">FEIRA</button>
+                        <button type="button" class="btn" data-value="PRESENTE">PRESENTE</button>
+                    </div>
+                    <input type="hidden" name="motivo" id="motivo_hidden" value="{{ form_data.motivos[0] }}">
+                </div>
+
+                <div class="form-group">
+                    <label>Modelo</label>
+                    <div id="modelo-group" class="button-group">
+                        {% for m in form_data.modelos %}
+                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ m }}">{{ m }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="modelo" id="modelo_hidden" value="{{ form_data.modelos[0] }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="num_pedido">Nº Pedido</label>
+                    <input type="text" name="num_pedido" id="num_pedido"
+                           placeholder="Ex: 10234"
+                           style="width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-family:inherit; color:var(--text); transition:border-color 0.15s;">
+                </div>
+
+                <div class="form-group" id="paralama-section">
+                    <label>Cor do Paralama</label>
+                    <div id="cor-paralama-group" class="button-group color-group">
+                        {% for c in form_data.cores_paralama %}
+                        <button type="button" class="btn color-btn {% if loop.first %}active{% endif %}" data-value="{{ c }}" style="background-color: {{ form_data.cores_css[c] }};"></button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="cor_paralama" id="cor_paralama_hidden" value="{{ form_data.cores_paralama[0] }}">
+                </div>
+
+                <div class="form-group quantidade-group">
+                    <label for="quantidade">Quantidade</label>
+                    <div class="quick-buttons">
+                        <button type="button" class="btn-quick" data-value="3">3</button>
+                        <button type="button" class="btn-quick" data-value="6">6</button>
+                        <button type="button" class="btn-quick" data-value="9">9</button>
+                        <button type="button" class="btn-quick" data-value="12">12</button>
+                    </div>
+                    <div class="input-stepper">
+                        <button type="button" class="btn-stepper" id="decrement">−</button>
+                        <input type="number" name="quantidade" id="quantidade" min="1" value="1" required>
+                        <button type="button" class="btn-stepper" id="increment">+</button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-submit" style="width:100%; margin:0;">Registrar Saída</button>
+
+            </div>
+        </form>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="reports-section">
+
+            <!-- Controles de Filtro -->
+            <div class="filter-controls">
+                <h3>Período:</h3>
+                <a href="{{ url_for('saidas', periodo='diario') }}"
+                   class="btn {% if periodo_selecionado == 'diario' %}active{% endif %}">Hoje</a>
+                <a href="{{ url_for('saidas', periodo='semanal') }}"
+                   class="btn {% if periodo_selecionado == 'semanal' %}active{% endif %}">Semana</a>
+                <a href="{{ url_for('saidas', periodo='mensal') }}"
+                   class="btn {% if periodo_selecionado == 'mensal' %}active{% endif %}">Mês</a>
+
+                <!-- Filtro por intervalo de datas -->
+                <form method="get" action="{{ url_for('saidas') }}"
+                      style="display:inline-flex; align-items:center; gap:6px; background:none; box-shadow:none; margin:0; padding:0; border-radius:0;">
+                    <input type="date" name="data_inicio" value="{{ data_inicio }}"
+                           class="month-picker" style="max-width:none; width:130px;"
+                           title="Data início">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">até</span>
+                    <input type="date" name="data_fim" value="{{ data_fim }}"
+                           class="month-picker" style="max-width:none; width:130px;"
+                           title="Data fim">
+                    <button type="submit" class="btn" style="flex:none; min-height:auto; padding:6px 10px; font-size:0.8rem;">▶</button>
+                </form>
+            </div>
+
+            <!-- Log de Pedidos -->
+            <div style="background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-md); margin-top:16px; overflow:hidden; border:1px solid var(--border);">
+                <div style="padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                    <h2 style="font-size:0.95rem; font-weight:600; margin:0;">Log de Saídas</h2>
+                    <input type="search" id="search-saidas" class="search-input" placeholder="Pesquisar por nº pedido...">
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table id="table-saidas">
+                        <thead>
+                            <tr>
+                                <th>Nº Pedido</th>
+                                <th>Motivo</th>
+                                <th>Data e Turno</th>
+                                <th style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pedido in log_pedidos %}
+                            {% set pedido_idx = loop.index0 %}
+                            <!-- Linha do pedido (pai) -->
+                            <tr class="pedido-row">
+                                <td>
+                                    <strong>{{ pedido.num_pedido }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge-motivo">{{ pedido.motivo }}</span>
+                                </td>
+                                <td>{{ pedido.data }} <span class="turno-badge turno-{{ pedido.turno | lower }}">{{ pedido.turno }}</span></td>
+                                <td style="text-align:center;">
+                                    <button type="button" class="btn-toggle-pedido" data-target="{{ pedido_idx }}" title="Expandir">›</button>
+                                </td>
+                            </tr>
+
+                            <!-- Linhas dos itens (filhos) -->
+                            {% for item in pedido.itens %}
+                            <tr class="item-row" data-parent="{{ pedido_idx }}" style="display:none;">
+                                <td class="item-indent">{{ item.nome_completo }}</td>
+                                <td class="quantity-cell">{{ item.quantidade }}</td>
+                                <td style="color:var(--text-muted); font-size:0.82rem;">{{ item.hora }}</td>
+                                <td class="action">
+                                    <button type="button" class="btn-edit"
+                                            data-id="{{ item.id }}"
+                                            data-name="{{ item.nome_completo }}"
+                                            data-quantity="{{ item.quantidade }}"
+                                            data-type="saida">✏</button>
+                                    <form action="{{ url_for('excluir_saida', id_saida=item.id) }}" method="POST" class="form-delete">
+                                        <button type="submit" class="btn-delete">🗑</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                            {% if pedido.itens_peca %}
+                            <tr class="item-row" data-parent="{{ pedido_idx }}" style="display:none;">
+                                <td colspan="4" style="padding: 4px 16px 10px;">
+                                    <div style="margin-top: 8px; padding-top: 8px;
+                                                border-top: 1px dashed #ccc;">
+                                        <small style="color: #888;">Peças do pedido:</small>
+                                        <ul style="margin: 4px 0 0 0; padding-left: 16px;
+                                                   font-size: 0.85em;">
+                                            {% for item in pedido.itens_peca %}
+                                            <li>
+                                                {{ item.quantidade }}x {{ item.nome }}
+                                                {% if item.cor %}({{ item.cor }}){% endif %}
+                                                — <span style="color: #888;">{{ item.tipo }}</span>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+
+                            {% else %}
+                            <tr>
+                                <td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">
+                                    Nenhum registro no período selecionado.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="2"><strong>Total de itens visíveis:</strong></td>
+                                <td id="total-saidas" class="total-cell"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal: Editar Saída -->
+    <div id="edit-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Editar Item de Saída</h2>
+            <form id="edit-form" method="POST">
+                <p style="margin:0 0 16px; font-size:0.9rem; color:var(--text-muted);">
+                    <strong style="color:var(--text);" id="edit-product-name"></strong>
+                </p>
+                <div class="form-group">
+                    <label for="edit-quantity">Nova Quantidade</label>
+                    <input type="number" id="edit-quantity" name="quantidade" min="1" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-submit">Salvar</button>
+                    <button type="button" id="cancel-edit" class="btn-cancel-modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/saida.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estoque Geral — TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow-md);
+        }
+        .kpi-label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--text);
+        }
+        .kpi-value.ok     { color: var(--success); }
+        .kpi-value.danger { color: var(--danger);  }
+        .kpi-value.warn   { color: #f59e0b; }
+        .kpi-sub {
+            font-size: 0.75rem;
+            margin-top: 4px;
+            color: var(--text-muted);
+        }
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .charts-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: var(--shadow-md);
+        }
+        .chart-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 2px;
+        }
+        .chart-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+        .crit-list { list-style: none; padding: 0; margin: 0; }
+        .crit-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+        }
+        .crit-item:last-child { border-bottom: none; }
+        .crit-nome {
+            flex: 1; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .crit-bar-wrap {
+            width: 72px; height: 5px;
+            background: var(--border);
+            border-radius: 3px; overflow: hidden; flex-shrink: 0;
+        }
+        .crit-bar { height: 100%; border-radius: 3px; }
+        .crit-qtd {
+            font-weight: 700; min-width: 28px;
+            text-align: right; font-size: 0.82rem; flex-shrink: 0;
+        }
+        .def-list { list-style: none; padding: 0; margin: 0; }
+        .def-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 0; border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+        }
+        .def-item:last-child { border-bottom: none; }
+        .def-nome {
+            flex: 1; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .def-qtd {
+            font-weight: 700; color: var(--danger);
+            min-width: 24px; text-align: right; flex-shrink: 0;
+        }
+        .badge-imp {
+            font-size: 0.68rem; padding: 1px 6px; border-radius: 4px;
+            background: #dbeafe; color: #1d4ed8;
+            font-weight: 600; flex-shrink: 0;
+        }
+        .section-title {
+            font-size: 1rem; font-weight: 600; color: var(--text);
+            margin: 24px 0 12px; padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        @media (max-width: 700px) {
+            .charts-row, .charts-row-3 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="page-header">
+    <div class="page-header-title">
+        Estoque Geral
+        <span class="badge">TUI</span>
+    </div>
+    <div class="page-nav-links">
+        <a href="{{ url_for('producao') }}">Produção</a>
+        <a href="{{ url_for('saidas') }}">Saídas</a>
+        <a href="{{ url_for('pecas') }}">Peças</a>
+        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+    </div>
+</header>
+
+<div class="container-estoque">
+
+    <!-- ── KPIs ──────────────────────────────────────────────────────────── -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">Scooters em estoque</div>
+            <div class="kpi-value {% if total_scooters > 0 %}ok{% endif %}">
+                {{ total_scooters }}
+            </div>
+            <div class="kpi-sub">unidades prontas</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Peças críticas</div>
+            <div class="kpi-value {% if total_criticas > 0 %}danger{% else %}ok{% endif %}">
+                {{ total_criticas }}
+            </div>
+            <div class="kpi-sub">abaixo de 20 unidades</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Defeitos registrados</div>
+            <div class="kpi-value {% if total_defeitos > 0 %}warn{% else %}ok{% endif %}">
+                {{ total_defeitos }}
+            </div>
+            <div class="kpi-sub">total acumulado</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Embaladas hoje</div>
+            <div class="kpi-value">{{ embaladas_hoje }}</div>
+            <div class="kpi-sub">unidades no dia</div>
+        </div>
+    </div>
+
+    <!-- ── Linha 2: variação + críticas ──────────────────────────────────── -->
+    <div class="charts-row">
+
+        <div class="chart-card">
+            <div class="chart-title">Variação mais embalada</div>
+            <div class="chart-sub">Últimos 30 dias · por cor do paralama</div>
+            {% if top_cores %}
+            <div style="position:relative; height:220px;">
+                <canvas id="varChart"
+                    aria-label="Barras horizontais de variações mais embaladas por cor">
+                </canvas>
+            </div>
+            {% else %}
+            <p style="color:var(--text-muted); font-size:0.85rem;
+                      margin:40px 0; text-align:center;">
+                Nenhuma produção nos últimos 30 dias
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">
+                Peças críticas
+                {% if total_criticas > 0 %}
+                <span style="background:var(--danger); color:#fff;
+                             font-size:0.7rem; padding:2px 7px;
+                             border-radius:99px; margin-left:6px;">
+                    {{ total_criticas }} alerta{{ 's' if total_criticas != 1 }}
+                </span>
+                {% endif %}
+            </div>
+            <div class="chart-sub">Estoque abaixo do mínimo (20 un.)</div>
+            {% if pecas_criticas %}
+            <ul class="crit-list">
+                {% for p in pecas_criticas %}
+                {% set pct = [((p.quantidade_total / 20 * 100) | int), 100] | min %}
+                {% set pct = [pct, 0] | max %}
+                {% set cor_bar = '#E24B4A' if p.quantidade_total < 10
+                                 else '#BA7517' if p.quantidade_total < 15
+                                 else '#639922' %}
+                <li class="crit-item">
+                    <span class="crit-nome" title="{{ p.nome }}">{{ p.nome }}</span>
+                    <div class="crit-bar-wrap">
+                        <div class="crit-bar"
+                             style="width:{{ pct }}%; background:{{ cor_bar }};"></div>
+                    </div>
+                    <span class="crit-qtd" style="color:{{ cor_bar }};">
+                        {{ p.quantidade_total }}
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--success); font-size:0.85rem; margin:12px 0;">
+                &#10003; Todas as peças acima do mínimo
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Linha 3: tendência + defeitos ──────────────────────────────────── -->
+    <div class="charts-row-3">
+
+        <div class="chart-card" style="grid-column: span 2;">
+            <div class="chart-title">Tendência de embalagem</div>
+            <div class="chart-sub">
+                Scooters por semana · TUI MAIS vs TUI POP
+            </div>
+            <div style="display:flex; gap:16px; font-size:0.75rem;
+                        color:var(--text-muted); margin-bottom:10px;">
+                <span>
+                    <span style="display:inline-block; width:10px; height:10px;
+                                 border-radius:2px; background:#185FA5;
+                                 margin-right:4px; vertical-align:middle;"></span>TUI MAIS
+                </span>
+                <span>
+                    <span style="display:inline-block; width:10px; height:10px;
+                                 border-radius:2px; background:#1D9E75;
+                                 margin-right:4px; vertical-align:middle;"></span>TUI POP
+                </span>
+            </div>
+            {% if trend_labels %}
+            <div style="position:relative; height:150px;">
+                <canvas id="trendChart"
+                    aria-label="Linhas de tendência semanal TUI MAIS e TUI POP">
+                </canvas>
+            </div>
+            {% else %}
+            <p style="color:var(--text-muted); font-size:0.85rem;
+                      margin:32px 0; text-align:center;">
+                Nenhum dado de produção disponível
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Defeitos por peça</div>
+            <div class="chart-sub">Acumulado · importadas</div>
+            {% if top_defeitos %}
+            <ul class="def-list">
+                {% for nome, qtd in top_defeitos %}
+                <li class="def-item">
+                    <span class="def-nome" title="{{ nome }}">{{ nome }}</span>
+                    <span class="badge-imp">importada</span>
+                    <span class="def-qtd">{{ qtd }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p style="color:var(--success); font-size:0.85rem; margin:12px 0;">
+                &#10003; Nenhum defeito registrado
+            </p>
+            {% endif %}
+            <a href="{{ url_for('defeitos_pecas') }}"
+               style="display:block; margin-top:14px; font-size:0.8rem;
+                      text-align:center; color:var(--primary); text-decoration:none;">
+                Ver relatório completo &#8594;
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Grid de scooters (existente — não alterado) ───────────────────── -->
+    <div class="section-title">Estoque por modelo e cor</div>
+    <div class="dashboard-grid">
+        {% for modelo, cores in painel.items() %}
+        <div class="product-card">
+            <h2>{{ modelo }}</h2>
+            <div class="stock-grid">
+                {% for cor, qtd in cores.items() %}
+                {% set cor_dot = cor.split()[-1] %}
+                <div class="stock-item" style="opacity: {{ 1 if qtd > 0 else 0.4 }};">
+                    <div class="color-dot"
+                         style="background-color: {{ cores_css.get(cor_dot, '#ccc') }};"></div>
+                    <span class="stock-count">{{ qtd }}</span>
+                    <span class="stock-label">{{ cor }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <footer style="margin-top:40px; text-align:center;
+                   color:var(--text-muted); font-size:0.85rem;">
+        Atualizado em tempo real &bull; Sistema de Gestão TUI
+    </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function () {
+    const topCores = {{ top_cores | tojson }};
+    const tLabels  = {{ trend_labels | tojson }};
+    const tMais    = {{ trend_mais   | tojson }};
+    const tPop     = {{ trend_pop    | tojson }};
+
+    // ── Gráfico: variação mais embalada (barras horizontais) ──────────────
+    const varEl = document.getElementById('varChart');
+    if (varEl && topCores.length) {
+        new Chart(varEl, {
+            type: 'bar',
+            data: {
+                labels: topCores.map(c => c[0]),
+                datasets: [{
+                    label: 'Embaladas',
+                    data: topCores.map(c => c[1]),
+                    backgroundColor: '#185FA5',
+                    borderRadius: 4,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: { label: ctx => ` ${ctx.raw} unidades` }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(0,0,0,0.04)' },
+                         ticks: { font: { size: 11 } } },
+                    y: { grid: { display: false },
+                         ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    // ── Gráfico: tendência semanal (linhas) ────────────────────────────────
+    const trendEl = document.getElementById('trendChart');
+    if (trendEl && tLabels.length) {
+        new Chart(trendEl, {
+            type: 'line',
+            data: {
+                labels: tLabels,
+                datasets: [
+                    {
+                        label: 'TUI MAIS',
+                        data: tMais,
+                        borderColor: '#185FA5',
+                        backgroundColor: 'rgba(24,95,165,0.08)',
+                        fill: true, tension: 0.35,
+                        pointRadius: 3, borderWidth: 2,
+                    },
+                    {
+                        label: 'TUI POP',
+                        data: tPop,
+                        borderColor: '#1D9E75',
+                        backgroundColor: 'rgba(29,158,117,0.08)',
+                        fill: true, tension: 0.35,
+                        pointRadius: 3, borderWidth: 2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: { grid: { display: false },
+                         ticks: { font: { size: 10 } } },
+                    y: { grid: { color: 'rgba(0,0,0,0.04)' },
+                         ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,655 @@
+from .connection import get_connection
+
+CORES_PARALAMA = [
+    'AMARELO', 'AZUL', 'BRANCO', 'BRONZE', 'CINZA',
+    'LARANJA', 'PRATA', 'PRETO', 'ROSA', 'ROXO', 'VERDE', 'VERMELHO',
+]
+
+
+# ──────────────────────────────────────────────
+# CRIAÇÃO DE TABELAS
+# ──────────────────────────────────────────────
+
+def criar_tabelas_pecas():
+    """
+    Cria as 4 tabelas do módulo de peças.
+    CREATE TABLE IF NOT EXISTS em todas — nunca dropa tabela existente.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pecas (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT UNIQUE NOT NULL,
+            nome             TEXT NOT NULL,
+            origem           TEXT NOT NULL,
+            container_tipo   TEXT DEFAULT 'PADRAO',
+            tem_variacao_cor INTEGER DEFAULT 0,
+            peca_pai_id      INTEGER REFERENCES pecas(id),
+            ativo            INTEGER DEFAULT 1
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS estoque_pecas (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            peca_id     INTEGER NOT NULL REFERENCES pecas(id),
+            cor         TEXT DEFAULT NULL,
+            quantidade  INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(peca_id, cor)
+        )
+    """)
+
+    # Índice parcial para garantir idempotência do seed quando cor IS NULL.
+    # O UNIQUE(peca_id, cor) do SQLite não impede duas linhas com cor=NULL,
+    # pois NULL != NULL na verificação de unicidade. Este índice resolve.
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ep_peca_null_cor
+        ON estoque_pecas(peca_id) WHERE cor IS NULL
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS movimentacoes_peca (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            peca_id        INTEGER NOT NULL REFERENCES pecas(id),
+            cor            TEXT DEFAULT NULL,
+            tipo           TEXT NOT NULL,
+            quantidade     INTEGER NOT NULL,
+            motivo_detalhe TEXT DEFAULT '',
+            num_pedido     TEXT DEFAULT '',
+            num_lote       TEXT DEFAULT '',
+            modelo_scooter TEXT DEFAULT NULL,
+            data_hora      TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','localtime'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bom (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            modelo          TEXT NOT NULL,
+            peca_id         INTEGER NOT NULL REFERENCES pecas(id),
+            usa_cor_scooter INTEGER DEFAULT 0,
+            cor_fixa        TEXT DEFAULT NULL,
+            quantidade      INTEGER NOT NULL DEFAULT 1,
+            UNIQUE(modelo, peca_id)
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+# ──────────────────────────────────────────────
+# SEED — CARGA INICIAL DE PEÇAS
+# ──────────────────────────────────────────────
+
+def carregar_pecas_iniciais():
+    """
+    Insere todas as peças usando INSERT OR IGNORE (idempotente).
+    Inicializa estoque_pecas com quantidade 0.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # ── Peças raiz ──────────────────────────────────────────────────────────
+    pecas_raiz = [
+        # (codigo, nome, origem, container_tipo, tem_variacao_cor)
+        ('RD-TRAS',    'Roda traseira completa',          'IMPORTADA',    'PADRAO',  0),
+        ('PEDAL-FD',   'Pedal ferro retrátil direito',    'FERRAMENTARIA','PADRAO',  0),
+        ('PEDAL-FE',   'Pedal ferro retrátil esquerdo',   'FERRAMENTARIA','PADRAO',  0),
+        ('PARALAMA',   'Kit par paralama',                'IMPORTADA',    'PADRAO',  1),
+        ('QUADRO-MAIS','Quadro TUI MAIS',                 'FERRAMENTARIA','PADRAO',  0),
+        ('QUADRO-POP', 'Quadro TUI POP',                  'FERRAMENTARIA','PADRAO',  0),
+        ('FREIO-TRAS', 'Kit freio traseiro',              'IMPORTADA',    'PADRAO',  0),
+        ('FREIO-DI',   'Kit freio dianteiro',             'IMPORTADA',    'PADRAO',  0),
+        ('ENC-MAIS',   'Suporte encosto TUI MAIS',        'FERRAMENTARIA','PADRAO',  0),
+        ('ENC-POP',    'Suporte encosto TUI POP',         'FERRAMENTARIA','PADRAO',  0),
+        ('RD-DI',      'Roda dianteira completa',         'IMPORTADA',    'PADRAO',  0),
+        ('PEZINHO',    'Pezinho de descanso',             'FERRAMENTARIA','PADRAO',  0),
+        ('MOLA-PEZ',   'Mola do pezinho',                 'IMPORTADA',    'PADRAO',  0),
+        ('PAINEL-LCD', 'Painel LCD',                      'IMPORTADA',    'PADRAO',  0),
+        ('RETROVISOR', 'Kit retrovisor',                  'IMPORTADA',    'PADRAO',  0),
+        ('MESA-GUIDA', 'Mesa suporte guidão',             'IMPORTADA',    'PADRAO',  0),
+        ('MANOPLA',    'Manopla esquerda',                'IMPORTADA',    'PADRAO',  0),
+        ('BUZINA-INT', 'Interruptor de buzina',           'IMPORTADA',    'PADRAO',  0),
+        ('GUIDAO',     'Guidão',                          'FERRAMENTARIA','PADRAO',  0),
+        ('GARFO',      'Garfo',                           'FERRAMENTARIA','PADRAO',  0),
+        ('BATERIA',    'Bateria',                         'IMPORTADA',    'BATERIA', 0),
+        ('ENCOSTO-EST','Encosto estofado',                'IMPORTADA',    'PADRAO',  0),
+        ('EIXO-DI',    'Eixo dianteiro',                  'IMPORTADA',    'PADRAO',  0),
+        ('CONTROLAD',  'Controladora',                    'IMPORTADA',    'PADRAO',  0),
+        ('ROLAM-GARFO','Conjunto rolamento garfo',        'IMPORTADA',    'PADRAO',  0),
+        ('CON-CARREG', 'Conector cabo carregador',        'IMPORTADA',    'PADRAO',  0),
+        ('CARREGADOR', 'Carregador de bateria',           'IMPORTADA',    'PADRAO',  0),
+        ('BANCO-MAIS', 'Banco assento TUI MAIS',          'IMPORTADA',    'PADRAO',  0),
+        ('BANCO-POP',  'Banco assento TUI POP',           'IMPORTADA',    'PADRAO',  0),
+        ('ACELERADOR', 'Acelerador',                      'IMPORTADA',    'PADRAO',  0),
+        ('PCARN-D',    'Pedal carona direito TUI MAIS',   'FERRAMENTARIA','PADRAO',  0),
+        ('PCARN-E',    'Pedal carona esquerdo TUI MAIS',  'FERRAMENTARIA','PADRAO',  0),
+        ('FUSIVEL',    'Fusível',                         'IMPORTADA',    'BATERIA', 0),
+    ]
+
+    for codigo, nome, origem, container_tipo, tem_var in pecas_raiz:
+        cursor.execute("""
+            INSERT OR IGNORE INTO pecas
+                (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        """, (codigo, nome, origem, container_tipo, tem_var))
+
+    conn.commit()
+
+    # ── Busca IDs dos kits pai ───────────────────────────────────────────────
+    def _get_id(cod):
+        row = cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (cod,)).fetchone()
+        return row['id'] if row else None
+
+    id_freio_tras = _get_id('FREIO-TRAS')
+    id_freio_di   = _get_id('FREIO-DI')
+    id_rd_tras    = _get_id('RD-TRAS')
+    id_rd_di      = _get_id('RD-DI')
+
+    # ── Componentes de kits ─────────────────────────────────────────────────
+    componentes = [
+        # FREIO-TRAS
+        ('FT-CABO',   'Cabo freio traseiro',          'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-CILIN',  'Cilindro freio traseiro',      'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-SENSOR', 'Sensor de freio traseiro',     'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-PINCA',  'Pinça freio traseiro',         'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-SUPRTE', 'Suporte retrovisor esquerdo',  'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-PASTIL', 'Pastilha de freio traseira',   'IMPORTADA','PADRAO',0, id_freio_tras),
+        ('FT-MANETE', 'Manete esquerdo',              'IMPORTADA','PADRAO',0, id_freio_tras),
+        # FREIO-DI
+        ('FD-CABO',   'Cabo freio dianteiro',         'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-CILIN',  'Cilindro freio dianteiro',     'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-SENSOR', 'Sensor de freio dianteiro',    'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-PINCA',  'Pinça freio dianteiro',        'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-SUPRTE', 'Suporte retrovisor direito',   'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-PASTIL', 'Pastilha de freio dianteira',  'IMPORTADA','PADRAO',0, id_freio_di),
+        ('FD-MANETE', 'Manete direito',               'IMPORTADA','PADRAO',0, id_freio_di),
+        # RD-TRAS
+        ('RDT-PNEU',  'Pneu traseiro',               'IMPORTADA','PADRAO',0, id_rd_tras),
+        ('RDT-MOTOR', 'Motor',                        'IMPORTADA','PADRAO',0, id_rd_tras),
+        ('RDT-DISCO', 'Disco freio traseiro',         'IMPORTADA','PADRAO',0, id_rd_tras),
+        # RD-DI
+        ('RDD-PNEU',  'Pneu dianteiro',              'IMPORTADA','PADRAO',0, id_rd_di),
+        ('RDD-RODA',  'Roda dianteira',              'IMPORTADA','PADRAO',0, id_rd_di),
+        ('RDD-DISCO', 'Disco freio dianteiro',        'IMPORTADA','PADRAO',0, id_rd_di),
+    ]
+
+    for codigo, nome, origem, container_tipo, tem_var, pai_id in componentes:
+        cursor.execute("""
+            INSERT OR IGNORE INTO pecas
+                (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (codigo, nome, origem, container_tipo, tem_var, pai_id))
+
+    conn.commit()
+
+    # ── Inicializa estoque_pecas ─────────────────────────────────────────────
+    todas = cursor.execute("SELECT id, codigo, tem_variacao_cor FROM pecas").fetchall()
+
+    for peca in todas:
+        if peca['codigo'] == 'PARALAMA':
+            for cor in CORES_PARALAMA:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade)
+                    VALUES (?, ?, 0)
+                """, (peca['id'], cor))
+        else:
+            # INSERT OR IGNORE funciona aqui graças ao índice parcial
+            # idx_ep_peca_null_cor criado em criar_tabelas_pecas()
+            cursor.execute("""
+                INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade)
+                VALUES (?, NULL, 0)
+            """, (peca['id'],))
+
+    conn.commit()
+    conn.close()
+
+
+# ──────────────────────────────────────────────
+# BOM — BILL OF MATERIALS
+# ──────────────────────────────────────────────
+
+def carregar_bom_inicial():
+    """
+    Define quais peças compõem cada modelo de scooter.
+    INSERT OR IGNORE — idempotente.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    def _get_peca_id(cod):
+        row = cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (cod,)).fetchone()
+        return row['id'] if row else None
+
+    # ── BOM TUI MAIS ────────────────────────────────────────────────────────
+    # (codigo, usa_cor_scooter, cor_fixa, quantidade)
+    bom_mais = [
+        ('RD-TRAS',    0, None, 1),
+        ('PEDAL-FD',   0, None, 1),
+        ('PEDAL-FE',   0, None, 1),
+        ('PARALAMA',   1, None, 1),   # usa a cor da scooter
+        ('QUADRO-MAIS',0, None, 1),
+        ('FREIO-TRAS', 0, None, 1),
+        ('FREIO-DI',   0, None, 1),
+        ('ENC-MAIS',   0, None, 1),
+        ('RD-DI',      0, None, 1),
+        ('PEZINHO',    0, None, 1),
+        ('MOLA-PEZ',   0, None, 1),
+        ('PAINEL-LCD', 0, None, 1),
+        ('RETROVISOR', 0, None, 1),
+        ('MESA-GUIDA', 0, None, 1),
+        ('MANOPLA',    0, None, 1),
+        ('BUZINA-INT', 0, None, 1),
+        ('GUIDAO',     0, None, 1),
+        ('GARFO',      0, None, 1),
+        ('BATERIA',    0, None, 1),
+        ('ENCOSTO-EST',0, None, 1),
+        ('EIXO-DI',    0, None, 1),
+        ('CONTROLAD',  0, None, 1),
+        ('ROLAM-GARFO',0, None, 1),
+        ('CON-CARREG', 0, None, 1),
+        ('CARREGADOR', 0, None, 1),
+        ('BANCO-MAIS', 0, None, 1),
+        ('ACELERADOR', 0, None, 1),
+        ('PCARN-D',    0, None, 1),
+        ('PCARN-E',    0, None, 1),
+    ]
+
+    for codigo, usa_cor, cor_fixa, qtd in bom_mais:
+        peca_id = _get_peca_id(codigo)
+        if peca_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI MAIS', ?, ?, ?, ?)
+            """, (peca_id, usa_cor, cor_fixa, qtd))
+
+    # ── BOM TUI POP ─────────────────────────────────────────────────────────
+    bom_pop = [
+        ('RD-TRAS',    0, None, 1),
+        ('PEDAL-FD',   0, None, 1),
+        ('PEDAL-FE',   0, None, 1),
+        ('PARALAMA',   1, None, 1),   # usa a cor da scooter
+        ('QUADRO-POP', 0, None, 1),
+        ('FREIO-TRAS', 0, None, 1),
+        ('FREIO-DI',   0, None, 1),
+        ('ENC-POP',    0, None, 1),
+        ('RD-DI',      0, None, 1),
+        ('PEZINHO',    0, None, 1),
+        ('MOLA-PEZ',   0, None, 1),
+        ('PAINEL-LCD', 0, None, 1),
+        ('RETROVISOR', 0, None, 1),
+        ('MESA-GUIDA', 0, None, 1),
+        ('MANOPLA',    0, None, 1),
+        ('BUZINA-INT', 0, None, 1),
+        ('GUIDAO',     0, None, 1),
+        ('GARFO',      0, None, 1),
+        ('BATERIA',    0, None, 1),
+        ('ENCOSTO-EST',0, None, 1),
+        ('EIXO-DI',    0, None, 1),
+        ('CONTROLAD',  0, None, 1),
+        ('ROLAM-GARFO',0, None, 1),
+        ('CON-CARREG', 0, None, 1),
+        ('CARREGADOR', 0, None, 1),
+        ('BANCO-POP',  0, None, 1),
+        ('ACELERADOR', 0, None, 1),
+        # TUI POP não tem PCARN-D nem PCARN-E
+    ]
+
+    for codigo, usa_cor, cor_fixa, qtd in bom_pop:
+        peca_id = _get_peca_id(codigo)
+        if peca_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI POP', ?, ?, ?, ?)
+            """, (peca_id, usa_cor, cor_fixa, qtd))
+
+    conn.commit()
+    conn.close()
+
+
+# ──────────────────────────────────────────────
+# CONSULTAS DE PEÇAS
+# ──────────────────────────────────────────────
+
+def listar_pecas(apenas_ativas=True, apenas_raiz=False):
+    """Retorna lista de peças com estoque total agregado."""
+    conn = get_connection()
+
+    conditions = []
+    if apenas_ativas:
+        conditions.append("p.ativo = 1")
+    if apenas_raiz:
+        conditions.append("p.peca_pai_id IS NULL")
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    query = f"""
+        SELECT p.id, p.codigo, p.nome, p.origem, p.container_tipo,
+               p.tem_variacao_cor, p.peca_pai_id, p.ativo,
+               COALESCE(SUM(ep.quantidade), 0) AS estoque_total
+        FROM pecas p
+        LEFT JOIN estoque_pecas ep ON ep.peca_id = p.id
+        {where}
+        GROUP BY p.id
+        ORDER BY p.nome
+    """
+
+    rows = conn.execute(query).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def buscar_peca_por_codigo(codigo):
+    """Retorna dict da peça ou None."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM pecas WHERE codigo = ?", (codigo,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def buscar_peca_por_id(peca_id):
+    """Retorna dict da peça ou None."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM pecas WHERE id = ?", (peca_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def consultar_estoque_pecas(peca_id=None):
+    """
+    Retorna estoque atual por (peça, cor).
+    Se peca_id informado, filtra por ele.
+    """
+    conn = get_connection()
+
+    base = """
+        SELECT ep.peca_id, p.codigo, p.nome, p.origem, ep.cor, ep.quantidade
+        FROM estoque_pecas ep
+        JOIN pecas p ON p.id = ep.peca_id
+    """
+
+    if peca_id is not None:
+        rows = conn.execute(
+            f"{base} WHERE ep.peca_id = ? ORDER BY ep.cor",
+            (peca_id,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"{base} ORDER BY p.nome, ep.cor"
+        ).fetchall()
+
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def adicionar_peca(codigo, nome, origem, container_tipo='PADRAO',
+                   tem_variacao_cor=False, peca_pai_id=None):
+    """
+    Insere nova peça. Levanta ValueError se código já existir.
+    Inicializa estoque_pecas conforme tem_variacao_cor.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (codigo,)).fetchone():
+        conn.close()
+        raise ValueError(f"Código '{codigo}' já existe.")
+
+    cursor.execute("""
+        INSERT INTO pecas (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (codigo, nome, origem, container_tipo, int(tem_variacao_cor), peca_pai_id))
+
+    nova_id = cursor.lastrowid
+
+    if tem_variacao_cor:
+        for cor in CORES_PARALAMA:
+            cursor.execute(
+                "INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade) VALUES (?, ?, 0)",
+                (nova_id, cor)
+            )
+    else:
+        cursor.execute(
+            "INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade) VALUES (?, NULL, 0)",
+            (nova_id,)
+        )
+
+    conn.commit()
+    conn.close()
+
+
+# ──────────────────────────────────────────────
+# MOVIMENTAÇÕES
+# ──────────────────────────────────────────────
+
+def entrada_estoque_peca(peca_id, quantidade, cor=None,
+                         num_lote='', motivo_detalhe=''):
+    """Soma quantidade em estoque. Registra ENTRADA em movimentacoes."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if cor:
+        cursor.execute("""
+            UPDATE estoque_pecas SET quantidade = quantidade + ?
+            WHERE peca_id = ? AND cor = ?
+        """, (quantidade, peca_id, cor))
+    else:
+        cursor.execute("""
+            UPDATE estoque_pecas SET quantidade = quantidade + ?
+            WHERE peca_id = ? AND cor IS NULL
+        """, (quantidade, peca_id))
+
+    cursor.execute("""
+        INSERT INTO movimentacoes_peca
+            (peca_id, cor, tipo, quantidade, motivo_detalhe, num_lote)
+        VALUES (?, ?, 'ENTRADA', ?, ?, ?)
+    """, (peca_id, cor, quantidade, motivo_detalhe, num_lote))
+
+    conn.commit()
+    conn.close()
+
+
+def saida_manual_peca(peca_id, quantidade, tipo, cor=None,
+                      num_pedido='', motivo_detalhe='', num_lote=''):
+    """
+    tipo deve ser 'VENDA' ou 'DEFEITO'.
+    Valida estoque suficiente — levanta ValueError se não tiver.
+    """
+    if tipo not in ('VENDA', 'DEFEITO', 'ASSISTENCIA'):
+        raise ValueError(f"Tipo inválido: '{tipo}'. Use 'VENDA', 'DEFEITO' ou 'ASSISTENCIA'.")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if cor:
+        row = cursor.execute("""
+            SELECT quantidade FROM estoque_pecas WHERE peca_id = ? AND cor = ?
+        """, (peca_id, cor)).fetchone()
+    else:
+        row = cursor.execute("""
+            SELECT quantidade FROM estoque_pecas WHERE peca_id = ? AND cor IS NULL
+        """, (peca_id,)).fetchone()
+
+    if not row:
+        conn.close()
+        raise ValueError("Registro de estoque não encontrado para a peça/cor informada.")
+
+    if row['quantidade'] < quantidade:
+        conn.close()
+        raise ValueError(
+            f"Estoque insuficiente. Disponível: {row['quantidade']}, "
+            f"Solicitado: {quantidade}"
+        )
+
+    if cor:
+        cursor.execute("""
+            UPDATE estoque_pecas SET quantidade = quantidade - ?
+            WHERE peca_id = ? AND cor = ?
+        """, (quantidade, peca_id, cor))
+    else:
+        cursor.execute("""
+            UPDATE estoque_pecas SET quantidade = quantidade - ?
+            WHERE peca_id = ? AND cor IS NULL
+        """, (quantidade, peca_id))
+
+    cursor.execute("""
+        INSERT INTO movimentacoes_peca
+            (peca_id, cor, tipo, quantidade, motivo_detalhe, num_pedido, num_lote)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (peca_id, cor, tipo, quantidade, motivo_detalhe, num_pedido, num_lote))
+
+    conn.commit()
+    conn.close()
+
+
+def baixar_estoque_por_bom(modelo, cor_scooter, quantidade_scooters):
+    """
+    Chamado ao registrar embalagem de scooter.
+    Busca BOM do modelo e consome o estoque de cada peça.
+    Se ficar negativo, registra mesmo assim (alerta, não bloqueio).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    bom_items = cursor.execute("""
+        SELECT b.peca_id, b.usa_cor_scooter, b.cor_fixa, b.quantidade
+        FROM bom b
+        WHERE b.modelo = ?
+    """, (modelo,)).fetchall()
+
+    for item in bom_items:
+        peca_id     = item['peca_id']
+        qtd_consumo = item['quantidade'] * quantidade_scooters
+
+        if item['usa_cor_scooter']:
+            cor = cor_scooter
+        elif item['cor_fixa']:
+            cor = item['cor_fixa']
+        else:
+            cor = None
+
+        if cor:
+            cursor.execute("""
+                UPDATE estoque_pecas SET quantidade = quantidade - ?
+                WHERE peca_id = ? AND cor = ?
+            """, (qtd_consumo, peca_id, cor))
+        else:
+            cursor.execute("""
+                UPDATE estoque_pecas SET quantidade = quantidade - ?
+                WHERE peca_id = ? AND cor IS NULL
+            """, (qtd_consumo, peca_id))
+
+        cursor.execute("""
+            INSERT INTO movimentacoes_peca
+                (peca_id, cor, tipo, quantidade, modelo_scooter)
+            VALUES (?, ?, 'CONSUMO', ?, ?)
+        """, (peca_id, cor, qtd_consumo, modelo))
+
+    conn.commit()
+    conn.close()
+
+
+# ──────────────────────────────────────────────
+# RELATÓRIOS
+# ──────────────────────────────────────────────
+
+def consultar_movimentacoes(peca_id=None, tipo=None,
+                            data_inicio=None, data_fim=None):
+    """
+    Retorna movimentações com filtros opcionais.
+    JOIN com pecas para trazer nome e codigo. Ordena por data_hora DESC.
+    """
+    conn = get_connection()
+
+    conditions = []
+    params = []
+
+    if peca_id:
+        conditions.append("m.peca_id = ?")
+        params.append(peca_id)
+    if tipo:
+        conditions.append("m.tipo = ?")
+        params.append(tipo)
+    if data_inicio:
+        conditions.append("date(m.data_hora) >= ?")
+        params.append(data_inicio)
+    if data_fim:
+        conditions.append("date(m.data_hora) <= ?")
+        params.append(data_fim)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    query = f"""
+        SELECT m.id, m.peca_id, p.codigo, p.nome, m.cor, m.tipo,
+               m.quantidade, m.motivo_detalhe, m.num_pedido, m.num_lote,
+               m.modelo_scooter, m.data_hora
+        FROM movimentacoes_peca m
+        JOIN pecas p ON p.id = m.peca_id
+        {where}
+        ORDER BY m.data_hora DESC
+    """
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def consultar_pecas_criticas(minimo=20):
+    """
+    Retorna peças com quantidade total < minimo.
+    Agrupa por peca_id somando todas as cores.
+    """
+    conn = get_connection()
+
+    query = """
+        SELECT ep.peca_id, p.codigo, p.nome, p.origem,
+               SUM(ep.quantidade) AS quantidade_total
+        FROM estoque_pecas ep
+        JOIN pecas p ON p.id = ep.peca_id
+        WHERE p.ativo = 1
+        GROUP BY ep.peca_id
+        HAVING SUM(ep.quantidade) < ?
+        ORDER BY quantidade_total ASC
+    """
+
+    rows = conn.execute(query, (minimo,)).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def consultar_defeitos_para_relatorio(data_inicio=None, data_fim=None):
+    """
+    Retorna movimentações com tipo='DEFEITO'.
+    Usado para gerar relatório de reclamação ao fornecedor.
+    """
+    conn = get_connection()
+
+    conditions = ["m.tipo = 'DEFEITO'"]
+    params = []
+
+    if data_inicio:
+        conditions.append("date(m.data_hora) >= ?")
+        params.append(data_inicio)
+    if data_fim:
+        conditions.append("date(m.data_hora) <= ?")
+        params.append(data_fim)
+
+    where = "WHERE " + " AND ".join(conditions)
+
+    query = f"""
+        SELECT m.data_hora, p.codigo, p.nome, m.cor, m.quantidade,
+               m.motivo_detalhe, m.num_lote
+        FROM movimentacoes_peca m
+        JOIN pecas p ON p.id = m.peca_id
+        {where}
+        ORDER BY m.data_hora DESC
+    """
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Produção — TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="page-header-title">
+            Painel de Produção
+            <span class="badge">TUI</span>
+        </div>
+        <div class="page-nav-links">
+            <a href="{{ url_for('saidas') }}">Saídas</a>
+            <a href="{{ url_for('estoque_geral') }}">Estoque</a>
+            <a href="{{ url_for('pecas.listar_pecas') }}">Peças</a>
+            <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <form method="POST" id="production-form">
+            <h2>Registrar Embalagem</h2>
+
+            <div class="form-row" style="padding: 16px 20px 0; margin: 0;">
+                <div class="form-group" style="flex:1; margin-bottom:0;">
+                    <label for="tipo-registro-select">Tipo de Lançamento</label>
+                    <select name="tipo_registro" id="tipo-registro-select" class="form-select">
+                        <option value="estoque" selected>Para Estoque</option>
+                        <option value="assistencia">Para Assistência</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="flex:1; margin-bottom:0;">
+                    <label for="edicao-select">Edição / Cliente</label>
+                    <div class="edicao-container">
+                        <select name="edicao" id="edicao-select" class="form-select">
+                            {% for edicao in edicoes %}
+                            <option value="{{ edicao.id }}"{% if edicao.id == 1 %} selected{% endif %}>{{ edicao.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" id="btn-add-edicao" class="btn-add-new">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding: 0 20px 20px;">
+
+                <div class="form-group" style="margin-top:16px;">
+                    <label>Modelo</label>
+                    <div id="modelo-group" class="button-group">
+                        {% for m in form_data.modelos %}
+                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ m }}">{{ m }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="modelo" id="modelo_hidden" value="{{ form_data.modelos[0] }}">
+                </div>
+
+                <div class="form-group" style="display:none;" id="chassis-section">
+                    <label>Cor do Chassis <span id="chassis-static-label" class="static-label"></span></label>
+                    <div id="cor-chassis-group" class="button-group">
+                        {% for c in form_data.cores_chassis %}
+                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ c }}">{{ c }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="cor_chassis" id="cor_chassis_hidden" value="{{ form_data.cores_chassis[0] }}">
+                </div>
+
+                <div class="form-group" id="paralama-section">
+                    <label>Cor do Paralama</label>
+                    <div id="cor-paralama-group" class="button-group color-group">
+                        {% for c in form_data.cores_paralama %}
+                        <button type="button" class="btn color-btn {% if loop.first %}active{% endif %}" data-value="{{ c }}" style="background-color: {{ form_data.cores_css[c] }};"></button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="cor_paralama" id="cor_paralama_hidden" value="{{ form_data.cores_paralama[0] }}">
+                </div>
+
+                <div class="form-group quantidade-group">
+                    <label for="quantidade">Quantidade</label>
+                    <div class="quick-buttons">
+                        <button type="button" class="btn-quick" data-value="3">3</button>
+                        <button type="button" class="btn-quick" data-value="6">6</button>
+                        <button type="button" class="btn-quick" data-value="9">9</button>
+                        <button type="button" class="btn-quick" data-value="12">12</button>
+                    </div>
+                    <div class="input-stepper">
+                        <button type="button" class="btn-stepper" id="decrement">−</button>
+                        <input type="number" name="quantidade" id="quantidade" min="1" value="1" required>
+                        <button type="button" class="btn-stepper" id="increment">+</button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-submit" style="width:100%; margin:0;">Registrar</button>
+
+            </div>
+        </form>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="reports-section">
+            <div class="tabs-container">
+                <ul class="tab-nav">
+                    <li><a href="#visao-geral" class="tab-link {% if aba_ativa == 'visao-geral' %}active{% endif %}">Visão Geral</a></li>
+                    <li><a href="#log-producao" class="tab-link {% if aba_ativa == 'log-producao' %}active{% endif %}">Log de Produção</a></li>
+                    <li><a href="#log-assistencia" class="tab-link {% if aba_ativa == 'log-assistencia' %}active{% endif %}">Assistência</a></li>
+                </ul>
+
+                <div class="tab-content">
+
+                    <div id="visao-geral" class="tab-pane {% if aba_ativa == 'visao-geral' %}active{% endif %}">
+                        <div class="table-header">
+                            <h2>Estoque por Modelo</h2>
+                            <input type="search" id="search-estoque" class="search-input" placeholder="Pesquisar...">
+                        </div>
+
+                        <div class="model-filters" id="model-filters-container">
+                            <span>Filtrar:</span>
+                            <button type="button" class="btn filter-btn active-filter" data-filter="todos">Todos</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI">TUI</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI MAIS">TUI MAIS</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI POP">TUI POP</button>
+                        </div>
+
+                        <table id="table-estoque">
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    <th>Estoque</th>
+                                    <th>Atualização</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in estoque_detalhado %}
+                                <tr>
+                                    <td>{{ item.nome_completo }}</td>
+                                    <td class="quantity-cell">
+                                        <span class="{% if item.estoque_atual <= 6 %}stock-low{% elif item.estoque_atual <= 12 %}stock-medium{% else %}stock-high{% endif %}">
+                                            {{ item.estoque_atual }}
+                                        </span>
+                                    </td>
+                                    <td>{{ item.data_atualizacao }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="3">Nenhum estoque registrado.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td><strong>Total Visível:</strong></td>
+                                    <td id="total-estoque" class="total-cell"></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div id="log-producao" class="tab-pane {% if aba_ativa == 'log-producao' %}active{% endif %}">
+                        <div class="tab-pane-controls">
+                            <div class="table-header">
+                                <h2>Lançamentos de Produção</h2>
+                                <input type="search" id="search-producao" class="search-input" placeholder="Pesquisar...">
+                            </div>
+                            <div class="filter-controls">
+                                <h3>Período:</h3>
+                                <a href="{{ url_for('producao', periodo='diario', aba='log-producao') }}" class="btn {% if periodo_selecionado == 'diario' %}active{% endif %}">Hoje</a>
+                                <a href="{{ url_for('producao', periodo='semanal', aba='log-producao') }}" class="btn {% if periodo_selecionado == 'semanal' %}active{% endif %}">Semana</a>
+                                <form action="{{ url_for('producao') }}" method="get" style="display:inline-flex; gap:5px; align-items:center; background:none; box-shadow:none; margin:0; padding:0; border-radius:0;">
+                                    <input type="hidden" name="aba" value="log-producao">
+                                    <input type="month" name="mes_filtro" class="month-picker"
+                                           value="{{ periodo_selecionado if '-' in periodo_selecionado else '' }}"
+                                           onchange="this.form.submit()">
+                                </form>
+                            </div>
+                        </div>
+                        <table id="table-producao">
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    <th>Qtd</th>
+                                    <th>Dia</th>
+                                    <th>Hora</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in producao_diaria %}
+                                <tr>
+                                    <td>{{ item.nome_completo }}</td>
+                                    <td class="quantity-cell">{{ item.quantidade }}</td>
+                                    <td>{{ item.dia }}</td>
+                                    <td>{{ item.hora }}</td>
+                                    <td class="action">
+                                        <button type="button" class="btn-edit"
+                                            data-id="{{ item.id }}"
+                                            data-name="{{ item.nome_completo }}"
+                                            data-quantity="{{ item.quantidade }}"
+                                            data-type="producao">✏ Editar
+                                        </button>
+                                        <form action="{{ url_for('excluir_producao', id_producao=item.id) }}" method="POST" class="form-delete">
+                                            <button type="submit" class="btn-delete">🗑 Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5">Nenhum registro no período.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td><strong>Total Visível:</strong></td>
+                                    <td id="total-producao" class="total-cell"></td>
+                                    <td colspan="3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div id="log-assistencia" class="tab-pane {% if aba_ativa == 'log-assistencia' %}active{% endif %}">
+                        <div class="tab-pane-controls">
+                            <div class="table-header">
+                                <h2>Lançamentos de Assistência</h2>
+                                <input type="search" id="search-assistencia" class="search-input" placeholder="Pesquisar...">
+                            </div>
+                            <div class="filter-controls">
+                                <h3>Período:</h3>
+                                <a href="{{ url_for('producao', periodo='diario', aba='log-assistencia') }}" class="btn {% if periodo_selecionado == 'diario' %}active{% endif %}">Hoje</a>
+                                <a href="{{ url_for('producao', periodo='semanal', aba='log-assistencia') }}" class="btn {% if periodo_selecionado == 'semanal' %}active{% endif %}">Semana</a>
+                                <form action="{{ url_for('producao') }}" method="get" style="display:inline-flex; gap:5px; align-items:center; background:none; box-shadow:none; margin:0; padding:0; border-radius:0;">
+                                    <input type="hidden" name="aba" value="log-assistencia">
+                                    <input type="month" name="mes_filtro" class="month-picker"
+                                           value="{{ periodo_selecionado if '-' in periodo_selecionado else '' }}"
+                                           onchange="this.form.submit()">
+                                </form>
+                            </div>
+                        </div>
+                        <table id="table-assistencia">
+                            <thead>
+                                <tr>
+                                    <th>Modelo</th>
+                                    <th>Qtd</th>
+                                    <th>Dia</th>
+                                    <th>Hora</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in assistencia_diaria %}
+                                <tr>
+                                    <td>{{ item.nome }}</td>
+                                    <td class="quantity-cell">{{ item.quantidade }}</td>
+                                    <td>{{ item.dia }}</td>
+                                    <td>{{ item.hora }}</td>
+                                    <td class="action">
+                                        <button type="button" class="btn-edit"
+                                            data-id="{{ item.id }}"
+                                            data-name="{{ item.nome_completo }}"
+                                            data-quantity="{{ item.quantidade }}"
+                                            data-date="{ item.data_hora_formatada }"
+                                            data-type="producao">✏ Editar
+                                        </button>
+                                        <form action="{{ url_for('excluir_assistencia', id_assistencia=item.id) }}" method="POST" class="form-delete">
+                                            <button type="submit" class="btn-delete">🗑 Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5">Nenhum registro no período.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td><strong>Total Visível:</strong></td>
+                                    <td id="total-assistencia" class="total-cell"></td>
+                                    <td colspan="3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal: Editar Registro -->
+    <div id="edit-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Editar Registro</h2>
+            <form id="edit-form" method="POST">
+                <p style="margin:0 0 16px; font-size:0.9rem; color:var(--text-muted);">
+                    <strong style="color:var(--text);" id="edit-product-name"></strong>
+                </p>
+                <div class="form-group">
+                    <label for="edit-quantity">Nova Quantidade</label>
+                    <input type="number" id="edit-quantity" name="quantidade" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-date">Data e Hora</label>
+                    <input type="datetime-local" id="edit-date" name="nova_data" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-submit">Salvar</button>
+                    <button type="button" id="cancel-edit" class="btn-cancel-modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Nova Edição -->
+    <div id="add-edicao-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Nova Edição / Cliente</h2>
+            <form id="add-edicao-form">
+                <div class="form-group">
+                    <label for="new-edicao-name">Nome</label>
+                    <input type="text" id="new-edicao-name" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-submit">Salvar</button>
+                    <button type="button" class="btn-cancel-modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/producao.js') }}"></script>
+</body>
+</html>

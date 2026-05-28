@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Defeitos — TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        @media print {
+            .page-header, .filter-controls, .no-print { display: none !important; }
+            body { background: #fff; }
+            .print-title {
+                display: block !important;
+                font-size: 1.2rem; font-weight: 700;
+                margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 8px;
+            }
+        }
+        .print-title { display: none; }
+        .btn-print {
+            padding: 8px 16px; font-size: 0.85rem;
+            border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+            background: var(--card); cursor: pointer; font-family: inherit;
+        }
+        .btn-print:hover { background: var(--surface); }
+    </style>
+</head>
+<body>
+
+<header class="page-header no-print">
+    <div class="page-header-title">
+        Relatório de Defeitos
+        <span class="badge">TUI</span>
+    </div>
+    <div class="page-nav-links">
+        <a href="{{ url_for('movimentacoes_pecas') }}">Movimentações</a>
+        <a href="{{ url_for('pecas') }}">← Peças</a>
+        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+    </div>
+</header>
+
+<div class="container">
+
+    <div class="print-title">Relatório de Defeitos — TUI Sistemas</div>
+
+    <!-- Filtros -->
+    <div class="filter-controls no-print">
+        <form method="get" action="{{ url_for('defeitos_pecas') }}"
+              style="display:inline-flex; align-items:center; gap:8px; background:none;
+                     box-shadow:none; margin:0; padding:0; border-radius:0;">
+            <label style="font-size:0.85rem; color:var(--text-muted);">Período:</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}"
+                   class="month-picker" style="width:130px;" title="Data início">
+            <span style="color:var(--text-muted); font-size:0.8rem;">até</span>
+            <input type="date" name="data_fim" value="{{ data_fim }}"
+                   class="month-picker" style="width:130px;" title="Data fim">
+            <button type="submit" class="btn" style="padding:7px 12px; font-size:0.85rem;">▶</button>
+            <a href="{{ url_for('defeitos_pecas') }}" class="btn"
+               style="padding:7px 12px; font-size:0.85rem;">✕</a>
+        </form>
+        <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+    </div>
+
+    <!-- Tabela -->
+    <div style="background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-md);
+                margin-top:16px; overflow:hidden; border:1px solid var(--border);">
+        <div style="padding:14px 20px; border-bottom:1px solid var(--border); display:flex;
+                    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <h2 style="font-size:0.95rem; font-weight:600; margin:0;">
+                Peças com Defeito
+                <span style="font-weight:400; color:var(--text-muted); font-size:0.85rem;">
+                    ({{ defeitos|length }} ocorrências)
+                </span>
+            </h2>
+            {% if data_inicio or data_fim %}
+            <span style="font-size:0.82rem; color:var(--text-muted);">
+                {% if data_inicio %}De {{ data_inicio }}{% endif %}
+                {% if data_fim %} até {{ data_fim }}{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data / Hora</th>
+                        <th>Código</th>
+                        <th>Nome da Peça</th>
+                        <th>Cor</th>
+                        <th style="text-align:right;">Qtd</th>
+                        <th>Motivo / Descrição do Defeito</th>
+                        <th>Nº Lote</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in defeitos %}
+                    <tr>
+                        <td style="white-space:nowrap; font-size:0.82rem; color:var(--text-muted);">
+                            {{ d.data_hora }}
+                        </td>
+                        <td><code style="font-size:0.8rem;">{{ d.codigo }}</code></td>
+                        <td>{{ d.nome }}</td>
+                        <td>{{ d.cor or '—' }}</td>
+                        <td style="text-align:right; font-weight:600; color:var(--danger);">
+                            {{ d.quantidade }}
+                        </td>
+                        <td>{{ d.motivo_detalhe or '—' }}</td>
+                        <td style="font-size:0.82rem; color:var(--text-muted);">
+                            {{ d.num_lote or '—' }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align:center; color:var(--text-muted); padding:32px;">
+                            Nenhum defeito registrado no período.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if defeitos %}
+                <tfoot>
+                    <tr>
+                        <td colspan="4"><strong>Total de unidades com defeito:</strong></td>
+                        <td style="text-align:right; font-weight:700; color:var(--danger);">
+                            {{ defeitos | sum(attribute='quantidade') }}
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

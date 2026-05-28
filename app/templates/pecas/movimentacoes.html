@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movimentações de Peças — TUI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .badge-tipo {
+            font-size: 0.72rem; font-weight: 700;
+            padding: 2px 8px; border-radius: 4px; letter-spacing: .04em;
+        }
+        .tipo-entrada  { background: #d1fae5; color: #065f46; }
+        .tipo-consumo  { background: #dbeafe; color: #1d4ed8; }
+        .tipo-venda    { background: #fef3c7; color: #92400e; }
+        .tipo-defeito      { background: #fee2e2; color: #991b1b; }
+        .tipo-assistencia  { background: #ffedd5; color: #9a3412; }
+    </style>
+</head>
+<body>
+
+<header class="page-header">
+    <div class="page-header-title">
+        Movimentações de Peças
+        <span class="badge">TUI</span>
+    </div>
+    <div class="page-nav-links">
+        <a href="{{ url_for('pecas') }}">← Peças</a>
+        <a href="{{ url_for('defeitos_pecas') }}">Defeitos</a>
+        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- Filtros -->
+    <div class="filter-controls">
+        <form method="get" action="{{ url_for('movimentacoes_pecas') }}"
+              style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+                     background:none; box-shadow:none; margin:0; padding:0; border-radius:0;">
+
+            <select name="peca_id" style="padding:7px 10px; border:1.5px solid var(--border);
+                    border-radius:var(--radius-sm); font-family:inherit; font-size:0.85rem;">
+                <option value="">Todas as peças</option>
+                {% for p in pecas_lista %}
+                <option value="{{ p.id }}" {% if peca_id_filtro == p.id|string %}selected{% endif %}>
+                    {{ p.codigo }} — {{ p.nome }}
+                </option>
+                {% endfor %}
+            </select>
+
+            <select name="tipo" style="padding:7px 10px; border:1.5px solid var(--border);
+                    border-radius:var(--radius-sm); font-family:inherit; font-size:0.85rem;">
+                <option value="">Todos os tipos</option>
+                {% for t in ['ENTRADA','CONSUMO','VENDA','DEFEITO','ASSISTENCIA'] %}
+                <option value="{{ t }}" {% if tipo_filtro == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+
+            <input type="date" name="data_inicio" value="{{ data_inicio }}"
+                   class="month-picker" style="width:130px;" title="Data início">
+            <span style="color:var(--text-muted); font-size:0.8rem;">até</span>
+            <input type="date" name="data_fim" value="{{ data_fim }}"
+                   class="month-picker" style="width:130px;" title="Data fim">
+
+            <button type="submit" class="btn" style="padding:7px 12px; font-size:0.85rem;">▶ Filtrar</button>
+            <a href="{{ url_for('movimentacoes_pecas') }}" class="btn"
+               style="padding:7px 12px; font-size:0.85rem;">✕ Limpar</a>
+        </form>
+    </div>
+
+    <!-- Tabela -->
+    <div style="background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-md);
+                margin-top:16px; overflow:hidden; border:1px solid var(--border);">
+        <div style="padding:14px 20px; border-bottom:1px solid var(--border); display:flex;
+                    align-items:center; justify-content:space-between;">
+            <h2 style="font-size:0.95rem; font-weight:600; margin:0;">
+                Log de Movimentações
+                <span style="font-weight:400; color:var(--text-muted); font-size:0.85rem;">
+                    ({{ movimentacoes|length }} registros)
+                </span>
+            </h2>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data / Hora</th>
+                        <th>Código</th>
+                        <th>Nome</th>
+                        <th>Tipo</th>
+                        <th>Cor</th>
+                        <th style="text-align:right;">Qtd</th>
+                        <th>Pedido</th>
+                        <th>Lote</th>
+                        <th>Motivo / Modelo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in movimentacoes %}
+                    <tr>
+                        <td style="white-space:nowrap; color:var(--text-muted); font-size:0.82rem;">
+                            {{ m.data_hora }}
+                        </td>
+                        <td><code style="font-size:0.8rem;">{{ m.codigo }}</code></td>
+                        <td>{{ m.nome }}</td>
+                        <td>
+                            <span class="badge-tipo tipo-{{ m.tipo | lower }}">{{ m.tipo }}</span>
+                        </td>
+                        <td>{{ m.cor or '—' }}</td>
+                        <td style="text-align:right; font-weight:600;">{{ m.quantidade }}</td>
+                        <td style="color:var(--text-muted); font-size:0.82rem;">{{ m.num_pedido or '—' }}</td>
+                        <td style="color:var(--text-muted); font-size:0.82rem;">{{ m.num_lote or '—' }}</td>
+                        <td style="color:var(--text-muted); font-size:0.82rem;">
+                            {{ m.motivo_detalhe or m.modelo_scooter or '—' }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" style="text-align:center; color:var(--text-muted); padding:32px;">
+                            Nenhuma movimentação no período selecionado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

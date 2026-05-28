@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Flask – run.py (principal)",
+      "runtimeExecutable": "C:\\Users\\User\\.pyenv\\pyenv-win\\versions\\3.13.5\\python.exe",
+      "runtimeArgs": ["run.py"],
+      "port": 5000
+    },
+    {
+      "name": "Flask – servidor.py (alternativo)",
+      "runtimeExecutable": "C:\\Users\\User\\.pyenv\\pyenv-win\\versions\\3.13.5\\python.exe",
+      "runtimeArgs": ["servidor.py"],
+      "port": 5000
+    }
+  ]
+}
