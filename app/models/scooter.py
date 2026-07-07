@@ -143,6 +143,82 @@ def carregar_variacoes_iniciais():
     conn.close()
 
 
+def carregar_variacoes_modelos_novos():
+    """
+    Semeia produtos + variacoes dos 3 modelos novos de scooter, seguindo
+    exatamente o padrão de carregar_variacoes_iniciais(). Idempotente
+    (INSERT OR IGNORE). Estoque inicial 0 (default da coluna estoque_atual).
+
+      - TUI MAIS-S  → variação só por cor de paralama (12), como família MAIS
+      - TUI MAIS-LS → variação só por cor de paralama (12), como família MAIS
+      - TUI POP-S   → chassis fixo PRETO + cor de paralama (12), como POP
+
+    Os nomes gerados batem com a lógica de nome_completo usada em
+    producao.py e saidas.py (MAIS = "MODELO cor"; POP = "MODELO PRETO cor").
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    produtos = [
+        ("SKU005", "TUI MAIS-S"),
+        ("SKU006", "TUI POP-S"),
+        ("SKU007", "TUI MAIS-LS"),
+    ]
+    for sku, nome in produtos:
+        cursor.execute("INSERT OR IGNORE INTO produtos (sku, nome) VALUES (?, ?)", (sku, nome))
+
+    conn.commit()
+
+    cursor.execute("SELECT id, nome FROM produtos")
+    ids = {row["nome"]: row["id"] for row in cursor.fetchall()}
+
+    cores_paralama = ["AMARELO", "AZUL", "BRANCO", "BRONZE", "CINZA",
+                      "LARANJA", "PRATA", "PRETO", "ROSA", "ROXO", "VERDE", "VERMELHO"]
+
+    # Família MAIS: só paralama (cor_chassis NULL)
+    for modelo in ("TUI MAIS-S", "TUI MAIS-LS"):
+        for cor in cores_paralama:
+            cursor.execute(
+                "INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
+                (ids[modelo], None, cor, f"{modelo} {cor}"))
+
+    # Família POP: chassis fixo PRETO + paralama
+    for cor in cores_paralama:
+        cursor.execute(
+            "INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
+            (ids["TUI POP-S"], "PRETO", cor, f"TUI POP-S PRETO {cor}"))
+
+    conn.commit()
+    conn.close()
+
+
+def migrar_motivos_saida():
+    """
+    Migração idempotente: renomeia motivos antigos de saidas_estoque para
+    os novos nomes. Mapeamento autorizado pelo usuário, sem preservar
+    correspondência semântica:
+      CPF      → CLIENTE
+      CNPJ     → REVENDA
+      FEIRA    → FEIRA (sem mudança)
+      PRESENTE → BONIFICADO
+    Rodar múltiplas vezes é seguro: se nenhum registro tiver o motivo
+    antigo, o UPDATE simplesmente não afeta nenhuma linha.
+    """
+    conn = get_connection()
+    mapeamento = {
+        'CPF': 'CLIENTE',
+        'CNPJ': 'REVENDA',
+        'PRESENTE': 'BONIFICADO',
+    }
+    for antigo, novo in mapeamento.items():
+        conn.execute(
+            "UPDATE saidas_estoque SET motivo = ? WHERE motivo = ?",
+            (novo, antigo)
+        )
+    conn.commit()
+    conn.close()
+
+
 # ------------------------------
 # Edições
 # ------------------------------

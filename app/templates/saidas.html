@@ -1,26 +1,9 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro de Saídas — TUI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Registro de Saídas — TUI{% endblock %}
+{% block current_page %}saidas{% endblock %}
+{% block header_title %}Registro de Saídas{% endblock %}
 
-    <header class="page-header">
-        <div class="page-header-title">
-            Registro de Saídas
-            <span class="badge">TUI</span>
-        </div>
-        <div class="page-nav-links">
-            <a href="{{ url_for('producao') }}">Produção</a>
-            <a href="{{ url_for('estoque_geral') }}">Estoque</a>
-            <a href="{{ url_for('pecas.listar_pecas') }}">Peças</a>
-            <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
-        </div>
-    </header>
-
+{% block content %}
     <div class="container">
 
         <form id="saida-form" method="POST">
@@ -28,23 +11,29 @@
 
             <div style="padding: 0 20px 20px;">
 
-                <div class="form-group" style="margin-top:16px;">
+                <div class="form-group motivo-group" style="margin-top:16px;">
                     <label>Motivo</label>
                     <div id="motivo-group" class="button-group">
-                        <button type="button" class="btn active" data-value="CPF">CPF</button>
-                        <button type="button" class="btn" data-value="CNPJ">CNPJ</button>
-                        <button type="button" class="btn" data-value="FEIRA">FEIRA</button>
-                        <button type="button" class="btn" data-value="PRESENTE">PRESENTE</button>
+                        {% for mot in form_data.motivos %}
+                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ mot }}">{{ mot }}</button>
+                        {% endfor %}
                     </div>
                     <input type="hidden" name="motivo" id="motivo_hidden" value="{{ form_data.motivos[0] }}">
                 </div>
 
                 <div class="form-group">
                     <label>Modelo</label>
-                    <div id="modelo-group" class="button-group">
-                        {% for m in form_data.modelos %}
-                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ m }}">{{ m }}</button>
-                        {% endfor %}
+                    <div id="modelo-group" class="modelo-grid-5">
+                        <button type="button" class="btn-modelo active"
+                                data-value="TUI MAIS">TUI MAIS</button>
+                        <button type="button" class="btn-modelo"
+                                data-value="TUI POP">TUI POP</button>
+                        <button type="button" class="btn-modelo btn-modelo-s"
+                                data-value="TUI MAIS-S">TUI MAIS-S</button>
+                        <button type="button" class="btn-modelo btn-modelo-s"
+                                data-value="TUI POP-S">TUI POP-S</button>
+                        <button type="button" class="btn-modelo btn-modelo-s btn-modelo-full"
+                                data-value="TUI MAIS-LS">TUI MAIS-LS</button>
                     </div>
                     <input type="hidden" name="modelo" id="modelo_hidden" value="{{ form_data.modelos[0] }}">
                 </div>
@@ -235,7 +224,8 @@
             </form>
         </div>
     </div>
+{% endblock %}
 
+{% block scripts %}
     <script src="{{ url_for('static', filename='js/saida.js') }}"></script>
-</body>
-</html>
+{% endblock %}

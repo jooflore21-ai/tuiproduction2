@@ -1,6 +1,7 @@
 from .connection import get_connection
 from .scooter import (
     criar_tabelas, carregar_variacoes_iniciais,
+    carregar_variacoes_modelos_novos, migrar_motivos_saida,
     registrar_producao, consultar_producao,
     registrar_assistencia, consultar_assistencia,
     deletar_assistencia, deletar_producao,
@@ -25,4 +26,17 @@ from .peca import (
     consultar_movimentacoes,
     consultar_pecas_criticas,
     consultar_defeitos_para_relatorio,
+    atualizar_custo_peca,
+    atualizar_custos_iniciais,
+    carregar_bom_modelos_novos,
+)
+from .pedido import (
+    criar_tabelas_pedidos,
+    buscar_ultimo_num_pedido_usado,
+    registrar_producao_pedido,
+    listar_pedidos_reservados,
+    buscar_pedido_por_numero,
+    confirmar_despacho,
+    cancelar_pedido,
+    editar_item_pedido,
 )

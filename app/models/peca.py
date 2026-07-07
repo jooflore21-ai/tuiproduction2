@@ -76,6 +76,11 @@ def criar_tabelas_pecas():
         )
     """)
 
+    # Migração: adiciona custo_unitario se a tabela já existia sem a coluna
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(pecas)").fetchall()]
+    if 'custo_unitario' not in cols:
+        conn.execute("ALTER TABLE pecas ADD COLUMN custo_unitario REAL DEFAULT 0")
+
     conn.commit()
     conn.close()
 
@@ -128,6 +133,20 @@ def carregar_pecas_iniciais():
         ('PCARN-D',    'Pedal carona direito TUI MAIS',   'FERRAMENTARIA','PADRAO',  0),
         ('PCARN-E',    'Pedal carona esquerdo TUI MAIS',  'FERRAMENTARIA','PADRAO',  0),
         ('FUSIVEL',    'Fusível',                         'IMPORTADA',    'BATERIA', 0),
+        # ── Peças novas — fase 7 ──────────────────────────────────────────
+        # Globais (entram em todas as BOMs)
+        ('10001',      'Farol traseiro',                  'IMPORTADA',    'PADRAO',  0),
+        ('10002',      'Alarme',                          'IMPORTADA',    'PADRAO',  0),
+        # Modelos -S / -LS (suspensão e variantes de quadro)
+        ('10003',      'Amortecedor',                     'IMPORTADA',    'PADRAO',  0),
+        ('10004',      'Garfo adaptado suspensão',        'FERRAMENTARIA','PADRAO',  0),
+        ('10005',      'Quadro adaptado TUI MAIS-S',      'FERRAMENTARIA','PADRAO',  0),
+        ('10006',      'Quadro adaptado TUI POP-S',       'FERRAMENTARIA','PADRAO',  0),
+        ('10007',      'Quadro comprido TUI MAIS-LS',     'FERRAMENTARIA','PADRAO',  0),
+        ('10008',      'Cabo freio traseiro longo',       'IMPORTADA',    'PADRAO',  0),
+        # Avulsas de assistência / venda
+        ('10009',      'Chave e trava painel',            'IMPORTADA',    'PADRAO',  0),
+        ('10010',      'Controle de alarme',              'IMPORTADA',    'PADRAO',  0),
     ]
 
     for codigo, nome, origem, container_tipo, tem_var in pecas_raiz:
@@ -331,6 +350,7 @@ def listar_pecas(apenas_ativas=True, apenas_raiz=False):
     query = f"""
         SELECT p.id, p.codigo, p.nome, p.origem, p.container_tipo,
                p.tem_variacao_cor, p.peca_pai_id, p.ativo,
+               p.custo_unitario,
                COALESCE(SUM(ep.quantidade), 0) AS estoque_total
         FROM pecas p
         LEFT JOIN estoque_pecas ep ON ep.peca_id = p.id
@@ -653,3 +673,205 @@ def consultar_defeitos_para_relatorio(data_inicio=None, data_fim=None):
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+# ──────────────────────────────────────────────
+# CUSTOS
+# ──────────────────────────────────────────────
+
+def atualizar_custo_peca(peca_id, novo_custo):
+    """Atualiza o custo unitário (USD) de uma peça pelo id."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE pecas SET custo_unitario = ? WHERE id = ?",
+        (novo_custo, peca_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def atualizar_custos_iniciais():
+    """
+    Aplica custos unitários (USD, proforma) nas peças existentes.
+    Idempotente — sobrescreve o valor atual, pode rodar múltiplas vezes.
+    Imprime aviso para códigos não encontrados no banco.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # (codigo, custo_usd)
+    # Sets desmembrados: RD-TRAS 70 % de 108.34, RD-DI 30 %;
+    #                    FREIO-TRAS 55 % de 19.82, FREIO-DI 45 %.
+    custos = [
+        ('CONTROLAD',  14.38),
+        ('PAINEL-LCD', 16.93),
+        ('BATERIA',    10.70),
+        ('ACELERADOR',  2.96),
+        ('RETROVISOR',  1.82),
+        ('MESA-GUIDA',  2.87),
+        ('ROLAM-GARFO', 0.82),
+        ('BUZINA-INT',  0.74),
+        ('CON-CARREG',  0.95),
+        ('EIXO-DI',     1.23),
+        ('MOLA-PEZ',    0.19),
+        ('BANCO-MAIS',  4.56),
+        ('BANCO-POP',   4.56),
+        ('ENCOSTO-EST', 1.90),
+        ('CARREGADOR', 10.70),
+        ('MANOPLA',     1.14),
+        ('RD-TRAS',    75.84),
+        ('RD-DI',      32.50),
+        ('FREIO-TRAS', 10.90),
+        ('FREIO-DI',    8.92),
+        ('RDT-DISCO',   1.67),
+        ('RDD-DISCO',   1.66),
+        ('PARALAMA',    8.38),
+        # Peças novas (fase 7)
+        ('10001',       3.32),   # Farol traseiro
+        ('10002',      16.79),   # Alarme
+        ('10003',       2.35),   # Amortecedor
+        ('10009',       1.00),   # Chave e trava painel
+        ('10010',       0.50),   # Controle de alarme
+    ]
+
+    nao_encontrados = []
+    for codigo, custo in custos:
+        row = cursor.execute(
+            "SELECT id FROM pecas WHERE codigo = ?", (codigo,)
+        ).fetchone()
+        if row:
+            cursor.execute(
+                "UPDATE pecas SET custo_unitario = ? WHERE id = ?",
+                (custo, row['id'])
+            )
+        else:
+            nao_encontrados.append(codigo)
+
+    conn.commit()
+    conn.close()
+
+    if nao_encontrados:
+        print(f"[AVISO] atualizar_custos_iniciais: "
+              f"códigos não encontrados → {nao_encontrados}")
+
+
+# ──────────────────────────────────────────────
+# BOMs — MODELOS NOVOS
+# ──────────────────────────────────────────────
+
+def carregar_bom_modelos_novos():
+    """
+    1. Adiciona Farol traseiro + Alarme às BOMs base (TUI MAIS, TUI POP).
+    2. Constrói BOMs de TUI MAIS-S, TUI POP-S e TUI MAIS-LS.
+    Totalmente idempotente via INSERT OR IGNORE (UNIQUE modelo+peca_id).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    def _id(cod):
+        row = cursor.execute(
+            "SELECT id FROM pecas WHERE codigo = ?", (cod,)
+        ).fetchone()
+        return row['id'] if row else None
+
+    # IDs das peças globais novas
+    id_farol    = _id('10001')
+    id_alarme   = _id('10002')
+    id_amort    = _id('10003')
+    id_garfo_s  = _id('10004')   # Garfo adaptado suspensão
+    id_quad_ms  = _id('10005')   # Quadro adaptado TUI MAIS-S
+    id_quad_ps  = _id('10006')   # Quadro adaptado TUI POP-S
+    id_quad_ls  = _id('10007')   # Quadro comprido TUI MAIS-LS
+    id_cabo_lng = _id('10008')   # Cabo freio traseiro longo
+
+    # IDs das peças originais que serão substituídas nas variantes
+    id_quadro_mais = _id('QUADRO-MAIS')
+    id_quadro_pop  = _id('QUADRO-POP')
+    id_garfo_orig  = _id('GARFO')
+
+    # ── 5.1 Adicionar Farol + Alarme às BOMs base ───────────────────────────
+    for modelo in ('TUI MAIS', 'TUI POP'):
+        for peca_id in (id_farol, id_alarme):
+            if peca_id:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO bom
+                        (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                    VALUES (?, ?, 0, NULL, 1)
+                """, (modelo, peca_id))
+
+    # ── 5.2 BOM TUI MAIS-S ──────────────────────────────────────────────────
+    # Cópia de TUI MAIS (já com farol+alarme), exceto QUADRO-MAIS e GARFO;
+    # adiciona Garfo adaptado, Quadro MAIS-S e Amortecedor x4.
+    excluir_mais_s = {id_quadro_mais, id_garfo_orig}
+    for item in cursor.execute(
+        "SELECT peca_id, usa_cor_scooter, cor_fixa, quantidade "
+        "FROM bom WHERE modelo = 'TUI MAIS'"
+    ).fetchall():
+        if item['peca_id'] not in excluir_mais_s:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI MAIS-S', ?, ?, ?, ?)
+            """, (item['peca_id'], item['usa_cor_scooter'],
+                  item['cor_fixa'], item['quantidade']))
+
+    for peca_id, qtd in [(id_garfo_s, 1), (id_quad_ms, 1), (id_amort, 4)]:
+        if peca_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI MAIS-S', ?, 0, NULL, ?)
+            """, (peca_id, qtd))
+
+    # ── 5.3 BOM TUI POP-S ───────────────────────────────────────────────────
+    # Cópia de TUI POP (já com farol+alarme), exceto QUADRO-POP e GARFO;
+    # adiciona Garfo adaptado, Quadro POP-S e Amortecedor x4.
+    excluir_pop_s = {id_quadro_pop, id_garfo_orig}
+    for item in cursor.execute(
+        "SELECT peca_id, usa_cor_scooter, cor_fixa, quantidade "
+        "FROM bom WHERE modelo = 'TUI POP'"
+    ).fetchall():
+        if item['peca_id'] not in excluir_pop_s:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI POP-S', ?, ?, ?, ?)
+            """, (item['peca_id'], item['usa_cor_scooter'],
+                  item['cor_fixa'], item['quantidade']))
+
+    for peca_id, qtd in [(id_garfo_s, 1), (id_quad_ps, 1), (id_amort, 4)]:
+        if peca_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI POP-S', ?, 0, NULL, ?)
+            """, (peca_id, qtd))
+
+    # ── 5.4 BOM TUI MAIS-LS ─────────────────────────────────────────────────
+    # Cópia de TUI MAIS-S, exceto Quadro MAIS-S (→ Quadro comprido LS).
+    # FREIO-TRAS permanece; Cabo freio longo é adicionado como item EXTRA —
+    # a substituição precisa do cabo dentro do kit será refinada quando
+    # os componentes de kit forem detalhados individualmente na BOM.
+    for item in cursor.execute(
+        "SELECT peca_id, usa_cor_scooter, cor_fixa, quantidade "
+        "FROM bom WHERE modelo = 'TUI MAIS-S'"
+    ).fetchall():
+        if item['peca_id'] == id_quad_ms:
+            continue  # substituído por Quadro comprido LS
+        cursor.execute("""
+            INSERT OR IGNORE INTO bom
+                (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+            VALUES ('TUI MAIS-LS', ?, ?, ?, ?)
+        """, (item['peca_id'], item['usa_cor_scooter'],
+              item['cor_fixa'], item['quantidade']))
+
+    for peca_id, qtd in [(id_quad_ls, 1), (id_cabo_lng, 1)]:
+        if peca_id:
+            cursor.execute("""
+                INSERT OR IGNORE INTO bom
+                    (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
+                VALUES ('TUI MAIS-LS', ?, 0, NULL, ?)
+            """, (peca_id, qtd))
+
+    conn.commit()
+    conn.close()

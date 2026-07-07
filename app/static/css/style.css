@@ -1187,3 +1187,252 @@ td form.form-delete { display: block; }
   .tab-nav a { padding: 8px 8px; font-size: 0.78rem; }
   .filter-controls { flex-wrap: wrap; gap: 6px; }
 }
+
+/* ══ BLOCO D — REDESIGN EMBALAGEM ══════════════════════════ */
+
+/* Botão hambúrguer — escondido por padrão em telas grandes */
+.btn-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+}
+.btn-hamburger:hover { background: var(--surface); }
+
+/* Grid dos 5 modelos: 2+2+1 */
+.modelo-grid-5 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+/* Botão de modelo base (azul) */
+.btn-modelo {
+  padding: 8px 4px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.2;
+  min-height: 36px;
+  transition: all 0.15s ease;
+}
+.btn-modelo:hover {
+  border-color: #94a3b8;
+  background: var(--surface);
+}
+.btn-modelo.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* Botão de modelo -S/-LS (roxo) */
+.btn-modelo-s {
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+.btn-modelo-s:hover {
+  border-color: #a78bfa;
+  background: #f5f3ff;
+}
+.btn-modelo-s.active {
+  border-color: #7c3aed;
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+
+/* Modelo que ocupa linha inteira (TUI MAIS-LS) */
+.btn-modelo-full { grid-column: span 2; }
+
+/* Quantidade: quick-buttons (linha 1) + stepper (linha 2), empilhados */
+.quantidade-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Quick-buttons e stepper ocupando a largura total do bloco, altura maior.
+   Seletores sem escopo (mesma especificidade da base) para que as @media
+   de altura ainda consigam comprimir o padding em telas baixas. */
+.quick-buttons {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+}
+.input-stepper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-quick {
+  flex: 1;            /* distribui igualmente a largura */
+  min-width: 0;       /* permite encolher se necessário */
+  padding: 10px 8px;  /* altura um pouco maior */
+}
+.btn-stepper {
+  padding: 10px 18px; /* mesma altura que btn-quick */
+}
+#quantidade {
+  padding: 10px 0;    /* altura consistente */
+}
+
+/* Botão Registrar: touch-first, sem hover, active robusto */
+#btn-registrar {
+  min-height: 48px;
+  cursor: pointer;
+}
+#btn-registrar:hover { background: var(--success); }
+#btn-registrar:active {
+  background: var(--success-dark);
+  transform: scale(0.99);
+}
+
+/* ── Drawer de navegação ──────────────────────────────────── */
+#nav-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+#nav-drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 220px;
+  height: 100%;
+  background: var(--card);
+  box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0 0;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+#nav-drawer-panel a {
+  padding: 14px 24px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+#nav-drawer-panel a:hover { background: var(--surface); }
+#nav-drawer.open #nav-drawer-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+#nav-drawer.open #nav-drawer-panel { transform: translateX(0); }
+#nav-drawer { display: block !important; }
+
+/* ── @media por ALTURA — 3 breakpoints ───────────────────── */
+
+/* < 750px E < 768px de largura: esconder nav desktop + título do card.
+   A largura evita que o ☰ apareça em notebooks largos e baixos. */
+@media (max-height: 750px) and (max-width: 767px) {
+  .nav-desktop { display: none !important; }
+  .btn-hamburger { display: block; }
+  #form-card-title { display: none; }
+  .page-header { height: 48px; }
+
+  .btn-modelo { min-height: 32px; font-size: 0.72rem; padding: 6px 4px; }
+  /* min-height: .color-btn também é .btn (min-height:42px) — sem isto não encolhe */
+  .color-btn { width: 36px; height: 36px; min-height: 36px; }
+  .btn-quick { padding: 6px 8px; }
+  .btn-stepper { padding: 6px 12px; }
+  #quantidade { width: 54px; font-size: 1.1rem; }
+  .form-select { height: 36px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { margin-bottom: 5px; }
+}
+
+/* < 650px E < 768px de largura: comprimir mais — bolinhas menores, labels somem */
+@media (max-height: 650px) and (max-width: 767px) {
+  .color-btn { width: 28px; height: 28px; min-height: 28px; }
+  .color-group { gap: 5px; }
+
+  /* Esconder labels das cores (nomes sob as bolinhas) */
+  .color-name-label { display: none; }
+
+  .btn-quick { padding: 5px 7px; font-size: 0.82rem; min-width: 30px; }
+  .btn-stepper { padding: 5px 10px; font-size: 1.1rem; }
+  #quantidade { width: 48px; font-size: 1rem; }
+  .form-body { padding: 10px 14px 12px; }
+  form > h2, .card-header { padding: 8px 14px; }
+  .form-group { margin-bottom: 10px; }
+  .form-select { height: 32px; font-size: 0.85rem; }
+  #btn-registrar { min-height: 44px; font-size: 0.9rem; }
+}
+
+/* < 580px E < 768px de largura: compressão máxima */
+@media (max-height: 580px) and (max-width: 767px) {
+  .page-header { height: 40px; }
+  .btn-modelo { min-height: 28px; font-size: 0.68rem; }
+  .color-btn { width: 24px; height: 24px; min-height: 24px; }
+  .color-group { gap: 4px; }
+  .form-group { margin-bottom: 8px; }
+  .form-group label { font-size: 0.75rem; margin-bottom: 3px; }
+  .quantidade-wrapper { gap: 4px; }
+}
+
+/* ── Correções pós-Bloco D ────────────────────────────────── */
+
+/* Selects Tipo/Edição: min-height em vez de height fixo (senão o
+   texto trunca quando as @media de altura reduzem para 32/36px).
+   Escopado por ID para não afetar demais selects do sistema. */
+#tipo-registro-select,
+#edicao-select {
+  min-height: 36px;
+  height: auto;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: 0.82rem;
+}
+
+/* Tipo de Lançamento + Edição/Cliente sempre lado a lado.
+   Sobrepõe o `@media (max-width:480px){ .form-row{ flex-direction:column } }`
+   que empilhava os campos em telas estreitas. Escopado ao form de embalagem. */
+#production-form .form-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+#production-form .form-row > .form-group {
+  flex: 1;
+  min-width: 0;   /* crítico: permite o flex item encolher abaixo do conteúdo */
+}
+#production-form .edicao-container .btn-add-new {
+  flex-shrink: 0; /* o botão + não encolhe junto com o select */
+}
+
+/* ── Saídas: bloco de motivo mais compacto ────────────────── */
+.motivo-group label {
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+.motivo-group .btn,
+#motivo-group .btn {
+  min-height: 34px;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+/* ══ FIM BLOCO D ════════════════════════════════════════════ */

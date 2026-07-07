@@ -6,16 +6,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupButtonGroup(groupElement, hiddenInputElement) {
         if (!groupElement || !hiddenInputElement) return;
 
-        const activeBtn = groupElement.querySelector('.btn.active');
+        const activeBtn = groupElement.querySelector('.btn.active, .btn-modelo.active');
         if (activeBtn && activeBtn.dataset.value !== undefined) {
             hiddenInputElement.value = activeBtn.dataset.value;
         }
 
         groupElement.addEventListener('click', (e) => {
-            const btn = e.target.closest('.btn');
+            const btn = e.target.closest('.btn, .btn-modelo');
             if (!btn || !groupElement.contains(btn)) return;
 
-            groupElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            groupElement.querySelectorAll('.btn, .btn-modelo').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
             const val = btn.dataset.value;

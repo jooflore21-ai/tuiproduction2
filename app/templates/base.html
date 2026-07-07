@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema TUI{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+{% set current = (self.current_page()|trim) if self.current_page is defined else '' %}
+{% set nav_pages = [
+    ('producao', url_for('producao'), 'Produção'),
+    ('saidas', url_for('saidas'), 'Saídas'),
+    ('estoque', url_for('estoque_geral'), 'Estoque'),
+    ('pecas', url_for('pecas.listar_pecas'), 'Peças'),
+] %}
+
+<header class="page-header">
+    <div class="page-header-title">
+        {% block header_title %}{% endblock %}
+        <span class="badge">TUI</span>
+    </div>
+    <button id="btn-drawer" class="btn-hamburger" aria-label="Menu">☰</button>
+    <div class="page-nav-links nav-desktop">
+        {% for key, url, label in nav_pages %}
+            {% if key != current %}
+            <a href="{{ url }}">{{ label }}</a>
+            {% endif %}
+        {% endfor %}
+        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
+    </div>
+</header>
+
+{% block content %}{% endblock %}
+
+<!-- Drawer de navegação (compartilhado) -->
+<div id="nav-drawer" style="display:none;">
+    <div id="nav-drawer-overlay"></div>
+    <nav id="nav-drawer-panel">
+        {% for key, url, label in nav_pages %}
+            {% if key != current %}
+            <a href="{{ url }}">{{ label }}</a>
+            {% endif %}
+        {% endfor %}
+        <a href="{{ url_for('landing_page') }}">← Início</a>
+    </nav>
+</div>
+
+<script src="{{ url_for('static', filename='js/drawer.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

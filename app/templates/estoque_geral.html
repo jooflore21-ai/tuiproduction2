@@ -1,10 +1,9 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estoque Geral — TUI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends "base.html" %}
+{% block title %}Estoque Geral — TUI{% endblock %}
+{% block current_page %}estoque{% endblock %}
+{% block header_title %}Estoque Geral{% endblock %}
+
+{% block extra_head %}
     <style>
         .kpi-grid {
             display: grid;
@@ -122,23 +121,144 @@
         @media (max-width: 700px) {
             .charts-row, .charts-row-3 { grid-template-columns: 1fr; }
         }
+
+        /* ── Comparativo de meses ─────────────────────────── */
+        .comp-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+        }
+        .comp-header {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .comp-header-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .comp-header-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--text-muted);
+        }
+        .comp-month-input {
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            color: var(--text);
+            background: var(--surface);
+            font-family: inherit;
+        }
+        .comp-vs {
+            height: 34px;
+            display: flex;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            padding: 0 4px;
+        }
+        .comp-btn {
+            height: 34px;
+            padding: 0 16px;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity .15s;
+        }
+        .comp-btn:hover { opacity: .88; }
+        .comp-btn:active { opacity: .75; }
+
+        .comp-kpi-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .comp-kpi {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+        }
+        .comp-kpi-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+        .comp-kpi-val {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1;
+            margin-bottom: 3px;
+        }
+        .comp-kpi-delta {
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .delta-up   { color: var(--success); }
+        .delta-down { color: var(--danger);  }
+        .delta-new  { color: var(--primary); }
+        .delta-muted{ color: var(--text-muted); font-weight: 400; }
+
+        .comp-chart-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 2px;
+        }
+        .comp-chart-sub {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .comp-legend {
+            display: flex;
+            gap: 14px;
+            margin-bottom: 8px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .comp-legend span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .comp-legend-sq {
+            width: 10px; height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        @media (max-width: 500px) {
+            .comp-kpi-row { grid-template-columns: 1fr; }
+        }
     </style>
-</head>
-<body>
+{% endblock %}
 
-<header class="page-header">
-    <div class="page-header-title">
-        Estoque Geral
-        <span class="badge">TUI</span>
-    </div>
-    <div class="page-nav-links">
-        <a href="{{ url_for('producao') }}">Produção</a>
-        <a href="{{ url_for('saidas') }}">Saídas</a>
-        <a href="{{ url_for('pecas') }}">Peças</a>
-        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
-    </div>
-</header>
-
+{% block content %}
 <div class="container-estoque">
 
     <!-- ── KPIs ──────────────────────────────────────────────────────────── -->
@@ -170,6 +290,126 @@
             <div class="kpi-sub">unidades no dia</div>
         </div>
     </div>
+
+    <!-- ── Comparativo de meses ─────────────────────────── -->
+    <div class="comp-section">
+
+      <!-- Seletor de meses -->
+      <form method="GET" action="{{ url_for('estoque.estoque_geral') }}">
+        <div class="comp-header">
+          <div class="comp-header-group">
+            <span class="comp-header-label">Mês A (referência)</span>
+            <input type="month" name="mes_a" class="comp-month-input"
+                   value="{{ mes_a }}" required>
+          </div>
+          <div class="comp-vs">vs</div>
+          <div class="comp-header-group">
+            <span class="comp-header-label">Mês B (comparação)</span>
+            <input type="month" name="mes_b" class="comp-month-input"
+                   value="{{ mes_b }}" required>
+          </div>
+          <button type="submit" class="comp-btn">Comparar</button>
+        </div>
+      </form>
+
+      <!-- KPI cards: total + top 2 modelos -->
+      <div class="comp-kpi-row">
+
+        <!-- Card 1: total geral -->
+        <div class="comp-kpi">
+          <div class="comp-kpi-label">Total embaladas</div>
+          <div class="comp-kpi-val">{{ total_a }}</div>
+          <div class="comp-kpi-delta">
+            {% if delta_total.tipo == 'sem_dados' %}
+              <span class="delta-muted">sem dados</span>
+            {% elif delta_total.tipo == 'novo' %}
+              <span class="delta-new">
+                ↑ +{{ delta_total.unidades }} un. (novo)
+              </span>
+            {% elif delta_total.unidades >= 0 %}
+              <span class="delta-up">
+                ↑ +{{ delta_total.unidades }} un.
+              </span>
+              <span class="delta-muted">
+                (+{{ delta_total.percentual }}% vs {{ label_mes_b }})
+              </span>
+            {% else %}
+              <span class="delta-down">
+                ↓ {{ delta_total.unidades }} un.
+              </span>
+              <span class="delta-muted">
+                ({{ delta_total.percentual }}% vs {{ label_mes_b }})
+              </span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Cards 2 e 3: top 2 modelos por crescimento -->
+        {% for item in top2_modelos %}
+        <div class="comp-kpi">
+          <div class="comp-kpi-label">{{ item.modelo }}</div>
+          <div class="comp-kpi-val">{{ item.val_a }}</div>
+          <div class="comp-kpi-delta">
+            {% if item.tipo == 'sem_dados' %}
+              <span class="delta-muted">sem dados</span>
+            {% elif item.tipo == 'novo' %}
+              <span class="delta-new">
+                ↑ +{{ item.unidades }} un. (novo)
+              </span>
+              <span class="delta-muted">vs {{ label_mes_b }}</span>
+            {% elif item.tipo == 'zerado' %}
+              <span class="delta-down">↓ zerado</span>
+              <span class="delta-muted">vs {{ label_mes_b }}</span>
+            {% elif item.unidades >= 0 %}
+              <span class="delta-up">
+                ↑ +{{ item.percentual }}%
+              </span>
+              <span class="delta-muted">vs {{ label_mes_b }}</span>
+            {% else %}
+              <span class="delta-down">
+                ↓ {{ item.percentual }}%
+              </span>
+              <span class="delta-muted">vs {{ label_mes_b }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+
+      <!-- Gráfico de barras agrupadas: todos os 5 modelos -->
+      <div class="comp-chart-title">Produção por modelo</div>
+      <div class="comp-chart-sub">
+        Comparativo {{ label_mes_a }} vs {{ label_mes_b }}
+      </div>
+      <div class="comp-legend">
+        <span>
+          <span class="comp-legend-sq" style="background:#2a78d6;"></span>
+          {{ label_mes_a }}
+        </span>
+        <span>
+          <span class="comp-legend-sq" style="background:#c3c2b7;"></span>
+          {{ label_mes_b }}
+        </span>
+      </div>
+      {% if comp_data_a|sum > 0 or comp_data_b|sum > 0 %}
+      <div style="position:relative; height:200px;">
+        <canvas id="compChart"
+          role="img"
+          aria-label="Barras agrupadas de produção por modelo,
+                      {{ label_mes_a }} vs {{ label_mes_b }}">
+          Comparativo de produção: {{ label_mes_a }} vs {{ label_mes_b }}
+        </canvas>
+      </div>
+      {% else %}
+      <p style="text-align:center; color:var(--text-muted);
+                font-size:0.85rem; margin:32px 0;">
+        Nenhuma produção registrada nos períodos selecionados
+      </p>
+      {% endif %}
+
+    </div>
+    <!-- ── Fim comparativo de meses ──────────────────────── -->
 
     <!-- ── Linha 2: variação + críticas ──────────────────────────────────── -->
     <div class="charts-row">
@@ -319,11 +559,14 @@
     </footer>
 
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 (function () {
     const topCores = {{ top_cores | tojson }};
+    const coresCss = {{ cores_css | tojson }};
     const tLabels  = {{ trend_labels | tojson }};
     const tMais    = {{ trend_mais   | tojson }};
     const tPop     = {{ trend_pop    | tojson }};
@@ -338,7 +581,9 @@
                 datasets: [{
                     label: 'Embaladas',
                     data: topCores.map(c => c[1]),
-                    backgroundColor: '#185FA5',
+                    backgroundColor: topCores.map(c => coresCss[c[0]] || '#185FA5'),
+                    borderColor: 'rgba(0,0,0,0.12)',
+                    borderWidth: 1,
                     borderRadius: 4,
                     borderSkipped: false,
                 }]
@@ -405,8 +650,66 @@
             }
         });
     }
+
+    // ── Gráfico comparativo de meses ──────────────────────
+    const compEl = document.getElementById('compChart');
+    if (compEl) {
+        const compLabels  = {{ comp_labels  | tojson }};
+        const compDataA   = {{ comp_data_a  | tojson }};
+        const compDataB   = {{ comp_data_b  | tojson }};
+        const labelMesA   = {{ label_mes_a  | tojson }};
+        const labelMesB   = {{ label_mes_b  | tojson }};
+
+        new Chart(compEl, {
+            type: 'bar',
+            data: {
+                labels: compLabels,
+                datasets: [
+                    {
+                        label: labelMesA,
+                        data: compDataA,
+                        backgroundColor: '#2a78d6',
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    },
+                    {
+                        label: labelMesB,
+                        data: compDataB,
+                        backgroundColor: '#c3c2b7',
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: ctx =>
+                                ` ${ctx.dataset.label}: ${ctx.raw} un.`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 10 },
+                                 maxRotation: 0 }
+                    },
+                    y: {
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 11 } },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
 })();
 </script>
-
-</body>
-</html>
+{% endblock %}

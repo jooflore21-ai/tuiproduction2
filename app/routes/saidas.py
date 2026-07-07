@@ -28,14 +28,17 @@ def saidas():
             quantidade = int(request.form.get('quantidade'))
             num_pedido = request.form.get('num_pedido', '').strip()
 
-            # Constrói o nome completo da variação
+            # Constrói o nome completo da variação (5 modelos).
+            # Famílias MAIS (MAIS/MAIS-S/MAIS-LS) → só paralama.
+            # Famílias POP (POP/POP-S) → chassis fixo PRETO + paralama.
+            # Bate com carregar_variacoes_modelos_novos() e com producao.py.
             nome_completo = modelo_nome
-            if modelo_nome == 'TUI POP':
-                cor_paralama = request.form.get('cor_paralama')
+            cor_paralama = request.form.get('cor_paralama')
+
+            if modelo_nome in ('TUI POP', 'TUI POP-S'):
                 cor_chassis = 'PRETO'  # chassis padrão para saídas
                 nome_completo = f"{modelo_nome} {cor_chassis} {cor_paralama}"
-            elif modelo_nome in ['TUI', 'TUI MAIS']:
-                cor_paralama = request.form.get('cor_paralama')
+            elif modelo_nome in ('TUI', 'TUI MAIS', 'TUI MAIS-S', 'TUI MAIS-LS'):
                 nome_completo = f"{modelo_nome} {cor_paralama}"
 
             models.registrar_saida(nome_completo, quantidade, motivo, num_pedido=num_pedido)
@@ -108,8 +111,9 @@ def saidas():
             if chave != 'S/N' else []
 
     form_data = {
-        'motivos': ["CPF", "CNPJ", "FEIRA", "PRESENTE"],
-        'modelos': ["TUI MAIS", "TUI POP"],
+        'motivos': ["CLIENTE", "REVENDA", "FEIRA", "BONIFICADO"],
+        'modelos': ["TUI MAIS", "TUI POP", "TUI MAIS-S",
+                    "TUI POP-S", "TUI MAIS-LS"],
         'cores_paralama': ["BRANCO", "PRETO", "VERMELHO", "CINZA", "AZUL", "AMARELO", "BRONZE", "PRATA", "LARANJA", "ROSA", "ROXO", "VERDE"],
         'cores_css': models.CORES_CSS,
     }

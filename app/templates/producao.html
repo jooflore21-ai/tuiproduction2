@@ -1,30 +1,13 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Produção — TUI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}Painel de Produção — TUI{% endblock %}
+{% block current_page %}producao{% endblock %}
+{% block header_title %}Painel de Produção{% endblock %}
 
-    <header class="page-header">
-        <div class="page-header-title">
-            Painel de Produção
-            <span class="badge">TUI</span>
-        </div>
-        <div class="page-nav-links">
-            <a href="{{ url_for('saidas') }}">Saídas</a>
-            <a href="{{ url_for('estoque_geral') }}">Estoque</a>
-            <a href="{{ url_for('pecas.listar_pecas') }}">Peças</a>
-            <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
-        </div>
-    </header>
-
+{% block content %}
     <div class="container">
 
         <form method="POST" id="production-form">
-            <h2>Registrar Embalagem</h2>
+            <h2 id="form-card-title">Registrar Embalagem</h2>
 
             <div class="form-row" style="padding: 16px 20px 0; margin: 0;">
                 <div class="form-group" style="flex:1; margin-bottom:0;">
@@ -52,12 +35,19 @@
 
                 <div class="form-group" style="margin-top:16px;">
                     <label>Modelo</label>
-                    <div id="modelo-group" class="button-group">
-                        {% for m in form_data.modelos %}
-                        <button type="button" class="btn {% if loop.first %}active{% endif %}" data-value="{{ m }}">{{ m }}</button>
-                        {% endfor %}
+                    <div id="modelo-group" class="modelo-grid-5">
+                        <button type="button" class="btn-modelo active"
+                                data-value="TUI MAIS">TUI MAIS</button>
+                        <button type="button" class="btn-modelo"
+                                data-value="TUI POP">TUI POP</button>
+                        <button type="button" class="btn-modelo btn-modelo-s"
+                                data-value="TUI MAIS-S">TUI MAIS-S</button>
+                        <button type="button" class="btn-modelo btn-modelo-s"
+                                data-value="TUI POP-S">TUI POP-S</button>
+                        <button type="button" class="btn-modelo btn-modelo-s btn-modelo-full"
+                                data-value="TUI MAIS-LS">TUI MAIS-LS</button>
                     </div>
-                    <input type="hidden" name="modelo" id="modelo_hidden" value="{{ form_data.modelos[0] }}">
+                    <input type="hidden" name="modelo" id="modelo_hidden" value="TUI MAIS">
                 </div>
 
                 <div class="form-group" style="display:none;" id="chassis-section">
@@ -82,20 +72,23 @@
 
                 <div class="form-group quantidade-group">
                     <label for="quantidade">Quantidade</label>
-                    <div class="quick-buttons">
-                        <button type="button" class="btn-quick" data-value="3">3</button>
-                        <button type="button" class="btn-quick" data-value="6">6</button>
-                        <button type="button" class="btn-quick" data-value="9">9</button>
-                        <button type="button" class="btn-quick" data-value="12">12</button>
-                    </div>
-                    <div class="input-stepper">
-                        <button type="button" class="btn-stepper" id="decrement">−</button>
-                        <input type="number" name="quantidade" id="quantidade" min="1" value="1" required>
-                        <button type="button" class="btn-stepper" id="increment">+</button>
+                    <div class="quantidade-wrapper">
+                        <div class="quick-buttons">
+                            <button type="button" class="btn-quick" data-value="3">3</button>
+                            <button type="button" class="btn-quick" data-value="6">6</button>
+                            <button type="button" class="btn-quick" data-value="9">9</button>
+                            <button type="button" class="btn-quick" data-value="12">12</button>
+                        </div>
+                        <div class="input-stepper">
+                            <button type="button" class="btn-stepper" id="decrement">−</button>
+                            <input type="number" name="quantidade" id="quantidade"
+                                   min="1" value="1" required>
+                            <button type="button" class="btn-stepper" id="increment">+</button>
+                        </div>
                     </div>
                 </div>
 
-                <button type="submit" class="btn-submit" style="width:100%; margin:0;">Registrar</button>
+                <button type="submit" id="btn-registrar" class="btn-submit" style="width:100%; margin:0;">Registrar</button>
 
             </div>
         </form>
@@ -130,6 +123,9 @@
                             <button type="button" class="btn filter-btn" data-filter="TUI">TUI</button>
                             <button type="button" class="btn filter-btn" data-filter="TUI MAIS">TUI MAIS</button>
                             <button type="button" class="btn filter-btn" data-filter="TUI POP">TUI POP</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI MAIS-S">TUI MAIS-S</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI POP-S">TUI POP-S</button>
+                            <button type="button" class="btn filter-btn" data-filter="TUI MAIS-LS">TUI MAIS-LS</button>
                         </div>
 
                         <table id="table-estoque">
@@ -334,7 +330,8 @@
             </form>
         </div>
     </div>
+{% endblock %}
 
+{% block scripts %}
     <script src="{{ url_for('static', filename='js/producao.js') }}"></script>
-</body>
-</html>
+{% endblock %}

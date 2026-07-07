@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (modelo) {
             case 'TUI':
             case 'TUI MAIS':
+            case 'TUI MAIS-S':
+            case 'TUI MAIS-LS':
                 // Chassis é sempre PRETO e travado.
                 chassisSection.classList.add('disabled');
                 chassisStaticLabel.textContent = '(Fixo: PRETO)';
@@ -60,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'TUI POP':
+            case 'TUI POP-S':
                 // Ambos habilitados.
                 chassisSection.classList.remove('disabled');
                 paralamaSection.classList.remove('disabled');
@@ -71,9 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupButtonGroup(groupElement, hiddenInputElement) {
         groupElement.addEventListener('click', (e) => {
             // Verifica se o clique foi em um botão dentro do grupo
-            if (e.target.matches('.btn')) {
+            if (e.target.matches('.btn, .btn-modelo')) {
                 // Remove a classe 'active' de todos os botões do grupo
-                groupElement.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+                groupElement.querySelectorAll('.btn, .btn-modelo').forEach(btn => btn.classList.remove('active'));
                 
                 // Adiciona 'active' apenas ao botão clicado
                 e.target.classList.add('active');
@@ -87,21 +90,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    btnDecrement.addEventListener('click', () => {
-        let val = parseInt(quantidadeInput.value) || 1;
-        if (val > 1) quantidadeInput.value = val - 1;
-    }); 
-
-    btnIncrement.addEventListener('click', () => {
-        let val = parseInt(quantidadeInput.value) || 1;
-        quantidadeInput.value = val + 1;
-    });
-
-    quickButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            quantidadeInput.value = btn.dataset.value;
+    if (btnDecrement && btnIncrement) {
+        btnDecrement.addEventListener('click', () => {
+            let val = parseInt(quantidadeInput.value) || 1;
+            if (val > 1) quantidadeInput.value = val - 1;
         });
-    });
+        btnIncrement.addEventListener('click', () => {
+            let val = parseInt(quantidadeInput.value) || 1;
+            quantidadeInput.value = val + 1;
+        });
+    }
+
+    if (quickButtons.length > 0) {
+        quickButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                quantidadeInput.value = btn.dataset.value;
+            });
+        });
+    }
 
     // Função para forçar um valor em um grupo de botões (usado para travar o chassis em 'PRETO')
     function setButtonGroupValue(groupElement, hiddenInputElement, value) {
@@ -257,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(addEdicaoModal){
 
         const btnAddEdicao = document.getElementById('btn-add-edicao');
-        const btnCancelModal = document.querySelector('.btn-cancel-modal');
+        const btnCancelModal = addEdicaoModal.querySelector('.btn-cancel-modal');
         const addEdicaoForm = document.getElementById('add-edicao-form');
         const edicaoSelect = document.getElementById('edicao-select');
         const newEdicaoNameInput = document.getElementById('new-edicao-name');
@@ -417,18 +423,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- INICIALIZAÇÃO ---
     // Configura o comportamento de 'rádio' para cada grupo de botões
 
-    tipoRegistroSelect.addEventListener('change', updateFormState);
-    edicaoSelect.addEventListener('change', updateFormState);
-    
-   
-    setupButtonGroup(modeloGroup, modeloHidden, updateFormState);
-    
-    
-    setupButtonGroup(corChassisGroup, corChassisHidden, null);
-    
-    
-    setupButtonGroup(corParalamaGroup, corParalamaHidden, null);
-    
+    if (tipoRegistroSelect) {
+        tipoRegistroSelect.addEventListener('change', updateFormState);
+    }
+    if (edicaoSelect) {
+        edicaoSelect.addEventListener('change', updateFormState);
+    }
+
+    if (modeloGroup && modeloHidden) {
+        setupButtonGroup(modeloGroup, modeloHidden);
+    }
+    if (corChassisGroup && corChassisHidden) {
+        setupButtonGroup(corChassisGroup, corChassisHidden);
+    }
+    if (corParalamaGroup && corParalamaHidden) {
+        setupButtonGroup(corParalamaGroup, corParalamaHidden);
+    }
+
 
     // Chama a função uma vez no início para configurar o estado inicial do formulário
     updateFormState();

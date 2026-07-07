@@ -1,10 +1,9 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Peças — TUI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends "base.html" %}
+{% block title %}Peças — TUI{% endblock %}
+{% block current_page %}pecas{% endblock %}
+{% block header_title %}Estoque de Peças{% endblock %}
+
+{% block extra_head %}
     <style>
         .badge-critico {
             display: inline-block;
@@ -34,7 +33,12 @@
             background: var(--card);
             cursor: pointer;
             font-family: inherit;
+            white-space: nowrap;
             transition: background .15s, border-color .15s;
+        }
+        #table-pecas td:last-child {
+            white-space: nowrap;
+            text-align: center;
         }
         .btn-sm:hover { background: var(--surface); border-color: var(--primary); }
         .btn-sm.btn-entrada { border-color: var(--success); color: var(--success); }
@@ -42,22 +46,9 @@
         .btn-sm.btn-saida   { border-color: var(--danger);  color: var(--danger);  }
         .btn-sm.btn-saida:hover   { background: #fee2e2; }
     </style>
-</head>
-<body>
+{% endblock %}
 
-<header class="page-header">
-    <div class="page-header-title">
-        Estoque de Peças
-        <span class="badge">TUI</span>
-    </div>
-    <div class="page-nav-links">
-        <a href="{{ url_for('producao') }}">Produção</a>
-        <a href="{{ url_for('saidas') }}">Saídas</a>
-        <a href="{{ url_for('estoque_geral') }}">Estoque</a>
-        <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
-    </div>
-</header>
-
+{% block content %}
 <div class="container">
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -109,25 +100,19 @@
             <table id="table-pecas">
                 <thead>
                     <tr>
-                        <th>Código</th>
                         <th>Nome</th>
-                        <th>Origem</th>
                         <th style="text-align:right;">Estoque</th>
-                        <th style="text-align:center; width:180px;">Ações</th>
+                        <th style="text-align:center; width:200px; white-space:nowrap;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for p in pecas %}
                     <tr>
-                        <td><code style="font-size:0.82rem;">{{ p.codigo }}</code></td>
                         <td>
                             {{ p.nome }}
                             {% if p.estoque_total < 20 %}
                             <span class="badge-critico">⚠ crítico</span>
                             {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge-origem origem-{{ p.origem | lower }}">{{ p.origem }}</span>
                         </td>
                         <td style="text-align:right; font-weight:600;
                                    color: {{ 'var(--danger)' if p.estoque_total < 20 else 'var(--text)' }};">
@@ -135,18 +120,18 @@
                         </td>
                         <td style="text-align:center;">
                             <button type="button" class="btn-sm btn-entrada"
-                                    onclick="abrirEntrada({{ p.id }}, '{{ p.nome | replace("'","\\'")|e }}', {{ p.tem_variacao_cor }})">
+                                    onclick="abrirEntrada({{ p.id }}, '{{ p.nome | replace("'","\\'")|e }}', {{ p.tem_variacao_cor }}, '{{ p.codigo }}', '{{ p.origem }}')">
                                 + Entrada
                             </button>
                             <button type="button" class="btn-sm btn-saida"
-                                    onclick="abrirSaida({{ p.id }}, '{{ p.nome | replace("'","\\'")|e }}', {{ p.tem_variacao_cor }})">
+                                    onclick="abrirSaida({{ p.id }}, '{{ p.nome | replace("'","\\'")|e }}', {{ p.tem_variacao_cor }}, '{{ p.codigo }}', '{{ p.origem }}')">
                                 − Saída
                             </button>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" style="text-align:center; color:var(--text-muted); padding:32px;">
+                        <td colspan="3" style="text-align:center; color:var(--text-muted); padding:32px;">
                             Nenhuma peça cadastrada.
                         </td>
                     </tr>
@@ -161,8 +146,12 @@
 <div id="modal-entrada" class="modal-overlay" style="display:none;">
     <div class="modal-content">
         <h2>Registrar Entrada</h2>
-        <p style="margin:0 0 16px; font-size:0.9rem; color:var(--text-muted);">
+        <p style="margin:0 0 8px; font-size:0.9rem; color:var(--text-muted);">
             <strong style="color:var(--text);" id="entrada-nome"></strong>
+        </p>
+        <p style="margin:0 0 16px; font-size:0.78rem; color:var(--text-muted); display:flex; gap:10px; align-items:center;">
+            <code id="entrada-codigo" style="font-size:0.78rem;"></code>
+            <span id="entrada-origem-badge" class="badge-origem"></span>
         </p>
         <form id="form-entrada" method="POST">
             <div class="form-group" id="entrada-cor-group" style="display:none;">
@@ -198,8 +187,12 @@
 <div id="modal-saida" class="modal-overlay" style="display:none;">
     <div class="modal-content">
         <h2>Registrar Saída</h2>
-        <p style="margin:0 0 16px; font-size:0.9rem; color:var(--text-muted);">
+        <p style="margin:0 0 8px; font-size:0.9rem; color:var(--text-muted);">
             <strong style="color:var(--text);" id="saida-nome"></strong>
+        </p>
+        <p style="margin:0 0 16px; font-size:0.78rem; color:var(--text-muted); display:flex; gap:10px; align-items:center;">
+            <code id="saida-codigo" style="font-size:0.78rem;"></code>
+            <span id="saida-origem-badge" class="badge-origem"></span>
         </p>
         <form id="form-saida" method="POST">
             <div class="form-group">
@@ -243,17 +236,27 @@
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-function abrirEntrada(id, nome, temCor) {
+function abrirEntrada(id, nome, temCor, codigo, origem) {
     document.getElementById('entrada-nome').textContent = nome;
+    document.getElementById('entrada-codigo').textContent = codigo;
+    const origemBadge = document.getElementById('entrada-origem-badge');
+    origemBadge.textContent = origem;
+    origemBadge.className = 'badge-origem origem-' + origem.toLowerCase();
     document.getElementById('form-entrada').action = '/pecas/' + id + '/entrada';
     document.getElementById('entrada-cor-group').style.display = temCor ? '' : 'none';
     document.getElementById('modal-entrada').style.display = 'flex';
 }
 
-function abrirSaida(id, nome, temCor) {
+function abrirSaida(id, nome, temCor, codigo, origem) {
     document.getElementById('saida-nome').textContent = nome;
+    document.getElementById('saida-codigo').textContent = codigo;
+    const origemBadge = document.getElementById('saida-origem-badge');
+    origemBadge.textContent = origem;
+    origemBadge.className = 'badge-origem origem-' + origem.toLowerCase();
     document.getElementById('form-saida').action = '/pecas/' + id + '/saida';
     document.getElementById('saida-cor-group').style.display = temCor ? '' : 'none';
     document.getElementById('modal-saida').style.display = 'flex';
@@ -289,6 +292,4 @@ document.getElementById('search-pecas').addEventListener('input', function() {
     });
 });
 </script>
-
-</body>
-</html>
+{% endblock %}

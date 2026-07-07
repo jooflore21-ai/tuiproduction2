@@ -1,0 +1,448 @@
+# ROADMAP.md — TUI Production Control
+
+Documento de planejamento vivo. Complementa o CLAUDE.md (que guarda
+estado técnico e regras). Aqui ficam as ideias em andamento, decisões
+pendentes e a fila de prioridades — para não perder nenhum fio solto
+entre conversas.
+
+---
+
+## Fila de execução atual
+
+### Prontos para rodar (não dependem de nada novo)
+- [ ] **Prompt 2** — Saídas: renomear motivos (Cliente/Revenda/Feira/
+      Bonificado, zerando histórico), adicionar 5 modelos, ajustar
+      width/height dos botões de quantidade
+- [ ] **Prompt 3** — Peças: remover Código e Origem da tabela visível,
+      mover para dentro do modal de Entrada/Saída como informação
+      de contexto (leitura). Tabela final: Nome · Estoque · Ações
+
+### Precisa de projeto antes de codar
+- [ ] **Drawer universal** — extrair header + drawer para um
+      template base (`base.html` com `{% extends %}`), aplicado a
+      todas as páginas (produção, saídas, estoque, peças, landing).
+      Mesma regra mobile (`max-height` + `max-width: 767px`) usada
+      hoje só em produção. **Risco:** refatoração de templates,
+      testar cada página depois.
+- [ ] **Bloco C expandido — Pedido unificado** (era "carrinho de
+      pedidos", agora absorve a ideia de reserva desde a produção).
+      Ver seção dedicada abaixo. Precisa de sessão de projeto
+      completa antes do primeiro prompt.
+
+---
+
+## Bloco C expandido — Pedido unificado (decisão tomada, projeto pendente)
+
+### Contexto e decisão
+Ideia original (conversa anterior): carrinho de pedidos só na saída,
+agrupando scooters + peças pelo mesmo `num_pedido`.
+
+Nova ideia (03/07/2026): mover a origem do `num_pedido` para a
+**produção**. Ao invés de só informar o pedido na saída, o operador
+já marca a scooter como pertencente a um pedido no momento em que
+embala — e ela fica **reservada** (não conta no estoque geral
+"livre") até a saída confirmar o despacho.
+
+**Decisão confirmada pelo usuário:** unificar as duas ideias em um
+único ciclo de vida de pedido, ao invés de dois sistemas
+desconectados. Razão: um sistema separado geraria "estoque fantasma"
+— reservas que nunca são liberadas porque produção e saída não se
+comunicam.
+
+### Ciclo de vida do pedido (rascunho — validar em sessão de projeto)
+
+```
+RESERVADO (criado na produção)
+  → scooter/peça vinculada a um num_pedido
+  → NÃO aparece no estoque geral livre
+  → aparece em alguma visão de "pendentes de despacho"
+        ↓
+DESPACHADO (confirmado na saída)
+  → operador busca por num_pedido
+  → vê o que já foi embalado para aquele pedido
+  → confirma quantidades e despacha
+  → baixa definitiva, sai da lista de pendentes
+```
+
+### O que já foi decidido
+1. Scooter embalada com tipo "Pedido" fica **reservada**, não conta
+   no estoque geral imediatamente (evita "achar" que tem uma TUI
+   preta disponível quando ela já tem dono).
+2. Na saída, o fluxo é **busca por número de pedido** → mostra o que
+   já foi embalado → operador confirma. Não é reentrada manual de
+   modelo/cor/quantidade do zero.
+3. Isso avisa logística/comercial que o pedido já está fisicamente
+   pronto, mesmo antes do despacho formal.
+
+### Perguntas em aberto para a sessão de projeto dedicada
+- Terceiro tipo de lançamento "Pedido" na produção: como o modal de
+  número de pedido se encaixa no fluxo atual (Tipo de Lançamento →
+  Modelo → Cor → Quantidade → Registrar)? Antes ou depois de
+  Registrar?
+- Onde aparecem os itens "reservados, aguardando despacho"? Nova aba
+  na página de produção? Nova página? Painel na página de saídas?
+- Como o operador de saída busca o pedido — campo de busca livre,
+  lista de pendentes clicável, ou os dois?
+- O que acontece se um pedido reservado precisa ser cancelado ou
+  alterado antes do despacho?
+- Como isso se conecta com a ideia already-aprovada de peças
+  reservadas junto ao mesmo pedido (o "lembrete" de adicionar peças
+  antes de finalizar o carrinho)?
+- Schema de banco: nova tabela `pedidos` (id, num_pedido, status,
+  data_criacao, data_despacho) + `itens_pedido_scooter` +
+  `itens_pedido_peca`? Ou reaproveitar `producao`/`saidas_estoque`
+  com uma coluna de status?
+- `consultar_estoque()` precisa mudar para excluir reservados —
+  qual o impacto nas queries existentes (dashboard, KPIs, etc.)?
+
+**Não escrever nenhum prompt de código para isso até a sessão de
+projeto responder essas perguntas.**
+
+---
+
+## Backlog — itens definidos, aguardando janela de execução
+
+- [ ] **ASSISTENCIA** — terceiro tipo de saída de peça (só custo,
+      sem receita). Já modelado no banco (`movimentacoes_peca.tipo`
+      aceita o valor), falta UI.
+- [ ] **Financeiro** — painel de gastos por tipo de movimentação
+      (CONSUMO, ASSISTENCIA, DEFEITO). `custo_unitario` já existe
+      no banco desde o Passo 1.
+- [ ] **TUI POP — limpar nomes no banco** — `nome_completo` inclui
+      cor de chassis (ex: "TUI POP PRETO BRANCO"), precisa
+      normalizar para só cor de paralama. Requer migração cuidadosa
+      (risco de colisão de nomes). Ver conversa de 21/05 para o
+      diagnóstico completo.
+- [ ] **HTTPS / certificado SSL** — Flask em dev roda HTTP puro,
+      browser mostra aviso de conexão não seguera. Solução: nginx
+      como proxy reverso + certificado. Tarefa de infraestrutura,
+      não de código Flask.
+- [ ] **Bug pré-existente do modal "Nova Edição"** — botão Cancelar
+      usa `document.querySelector('.btn-cancel-modal')` global, que
+      captura o primeiro do DOM (`#edit-modal`) ao invés do modal
+      certo. Fix sugerido: escopar a busca dentro do
+      `addEdicaoModal`. Identificado no Bloco D, não corrigido
+      (fora do escopo daquele prompt).
+
+---
+
+## Como usar este documento
+
+- Antes de iniciar qualquer prompt novo, verificar se ele já está
+  mapeado aqui.
+- Ao concluir um item, mover para o CLAUDE.md (seção "Concluído")
+  e remover ou riscar aqui.
+- Ideias novas que surgirem no meio de uma sessão entram aqui
+  primeiro, analisadas antes de virarem prompt — nunca direto pro
+  Claude Code sem passar pelo projeto.
+
+---
+
+## Bloco C expandido — decisões travadas em 03/07/2026
+
+### UI — Produção
+- Tipo de lançamento "Pedido" (3º além de Estoque/Assistência)
+- Ao clicar Registrar com tipo=Pedido: modal pop-up pede o número
+- Modal vem com o número do ÚLTIMO pedido inserido como default
+  (facilita múltiplos registros do mesmo pedido — caso de revenda)
+- Nova aba/seção na página de produção: "Pedidos" — lista o que
+  está reservado/aguardando despacho, visível para a equipe
+
+### UI — Saídas
+- O campo de número de pedido MANUAL continua existindo e
+  funcionando como hoje (fluxo direto pro estoque, sem reserva)
+- NOVO bloco abaixo do botão "Registrar Saída": lista de pedidos
+  já embalados aguardando despacho
+- Campo de busca por número de pedido nesse bloco
+- Cada linha do pedido tem botão de ação à direita: "Confirmar
+  despacho"
+- Itens de cada pedido visíveis/expansíveis, no mesmo padrão que
+  já existe no log de saídas atual
+
+### Schema de banco — decisão de engenharia (recomendada)
+Nova tabela dedicada em vez de reaproveitar `producao`/
+`saidas_estoque` com coluna de status. Razão: pedido é uma
+entidade com identidade própria (agrupa scooters E peças, tem
+ciclo de vida RESERVADO→DESPACHADO) — forçar isso em cima de
+tabelas que já têm outro propósito (registro de produção diária,
+registro de saída) acopla dois conceitos diferentes e complica
+toda query futura.
+
+```
+pedidos
+  id, num_pedido, status (RESERVADO|DESPACHADO),
+  data_criacao, data_despacho
+
+itens_pedido_scooter
+  pedido_id (FK), modelo, cor, quantidade
+
+itens_pedido_peca
+  pedido_id (FK), peca_id, cor, quantidade
+```
+
+`consultar_estoque()` precisa somar apenas o que está fora de
+pedidos com status RESERVADO — ajuste de query, não de schema.
+
+### Ainda em aberto (resolver na sessão de mockup)
+- Layout exato da aba "Pedidos" em produção — mesma estrutura de
+  tabela do log atual, ou cards?
+- O que acontece se um pedido reservado precisa ser cancelado/
+  alterado antes do despacho (edição, exclusão)?
+- Como a peça se vincula ao mesmo pedido na produção (o "lembrete"
+  discutido antes) — resolver junto com o mockup do modal
+
+---
+
+## Bloco C expandido — design fechado, pronto para fases (03/07/2026)
+
+### Últimas decisões
+- Pedido reservado PODE ser cancelado ou editado antes do despacho
+- Aba "Pedidos" em produção mostra a mesma lista da saída (número,
+  itens, data), MAS sem o botão de confirmar despacho — só leitura
+  + ação de cancelar/editar
+
+### Plano de fases (seguir esta ordem, uma fase por prompt)
+
+**Fase C1 — Schema e backend puro**
+- Criar tabelas `pedidos`, `itens_pedido_scooter`, `itens_pedido_peca`
+- Funções: `criar_pedido()`, `adicionar_item_scooter_pedido()`,
+  `buscar_pedido()`, `listar_pedidos_reservados()`,
+  `confirmar_despacho()`, `cancelar_pedido()`, `editar_item_pedido()`
+- Ajustar `consultar_estoque()` para excluir reservados
+- Sem UI nesta fase — só banco + models, testado via query direta
+
+**Fase C2 — Produção: tipo "Pedido" + modal**
+- 3º tipo de lançamento no formulário
+- Modal pop-up ao Registrar, pré-preenchido com último num_pedido
+- Ao confirmar: chama criar_pedido() + adiciona item, scooter fica
+  reservada (não conta no estoque geral)
+
+**Fase C3 — Produção: aba "Pedidos" (visão)**
+- Nova aba/seção na página de produção
+- Lista pedidos reservados: número, itens, data
+- Ações de cancelar/editar (sem botão de despacho)
+
+**Fase C4 — Saída: bloco de despacho**
+- Bloco abaixo do botão Registrar Saída
+- Busca por número de pedido
+- Lista com itens expansíveis + botão "Confirmar despacho"
+- Ao confirmar: chama confirmar_despacho(), some da lista de
+  reservados, entra definitivamente no histórico de saída
+
+**Fase C5 — Peças no mesmo pedido (retomando ideia do "lembrete")**
+- Ao finalizar registro de saída avulsa OU confirmar despacho,
+  perguntar se quer atribuir peças ao mesmo pedido (carrinho)
+- Conecta com a ideia original de "carrinho" discutida antes deste
+  desvio de produção-reservada
+
+### Regra de execução
+Cada fase é um prompt próprio, com leitura de arquivos antes,
+validação explícita depois, e relatório estruturado. Não pular
+fase — C2 depende de C1, C4 depende de C1, etc.
+
+---
+
+## Prompt 2 — Saídas · Concluído (03/07/2026)
+
+### O que foi feito (em etapas, por conta da descoberta abaixo)
+1. Migração idempotente de motivos: CPF→CLIENTE, CNPJ→REVENDA,
+   FEIRA→FEIRA, PRESENTE→BONIFICADO
+2. **Descoberta crítica:** os 3 modelos novos (MAIS-S, POP-S, MAIS-LS)
+   tinham peças/BOM (do Passo 1) mas NUNCA tiveram produto/variação
+   de estoque — por isso registrar produção OU saída falhava.
+   Resolvido com `carregar_variacoes_modelos_novos()`, seguindo o
+   mesmo padrão de `carregar_variacoes_iniciais()`. Família MAIS-S/
+   MAIS-LS só varia por paralama; POP-S tem chassis fixo PRETO +
+   paralama (igual família POP original).
+3. form_data atualizado com motivos e 5 modelos
+4. Lógica de nome_completo em saidas.py estendida para os 5 modelos
+5. Grid de modelo em saidas.html replicado exatamente do padrão de
+   produção (.modelo-grid-5, .btn-modelo, .btn-modelo-s, .btn-modelo-full)
+6. **Edit companheiro não previsto no prompt original:** `saida.js`
+   só reconhecia `.btn` no setupButtonGroup — precisou aceitar
+   `.btn-modelo` também, senão os botões ficavam visuais mas mortos.
+   Identificado e corrigido pelo Claude Code durante a validação.
+
+### Lição registrada
+Sempre que replicarmos um padrão visual de uma página pra outra
+(grid de modelo, quantidade, etc.), verificar se o JS companheiro
+da página de destino reconhece as MESMAS classes — não basta copiar
+o HTML/CSS, o event delegation precisa casar.
+
+---
+
+## Prompt 3 — Peças · Concluído (03/07/2026)
+
+Tabela simplificada para Nome · Estoque · Ações. Código e origem
+movidos para bloco de contexto (somente leitura) nos modais de
+Entrada e Saída, populados via JS. Backend intocado — pecas.py já
+retornava os dados necessários. Testado com entrada real (+2 un.
+em Acelerador, id 30 — dado de dev, reversível).
+
+### Status da fila
+- [x] Prompt 2 — Saídas (concluído, incluindo seed dos 3 modelos novos)
+- [x] Prompt 3 — Peças (concluído)
+- [ ] Drawer universal — próximo da fila
+- [ ] Bloco C — Fases C1 a C5
+
+---
+
+## Drawer universal — Fase 1 · Concluído (05/07/2026)
+
+Criados: `base.html` (blocos title/extra_head/header_title/
+current_page/content/scripts, nav via `self.current_page()|trim`)
+e `drawer.js` (compartilhado). Migradas: saidas.html,
+estoque_geral.html, pecas/index.html. Produção e Landing
+intocadas, conforme decidido.
+
+Todas as 3 páginas testadas: HTTP 200, nav exclui a própria
+página, drawer funciona (desktop sem ☰, mobile com ☰ + overlay
+pointer-events correto), scripts próprios (Chart.js, modais,
+formulários) intactos, regressão de saída real registrada com
+sucesso.
+
+**Dado de teste no banco:** saída TST-BASE-HTML (TUI MAIS BRANCO,
+CLIENTE) — reversível pela tela de Saídas.
+
+### Status da fila
+- [x] Drawer Fase 1 (Saídas, Estoque, Peças)
+- [ ] Drawer Fase 2 — migrar Produção para base.html (maior risco:
+      página já validada e corrigida do bug do overlay; remover
+      lógica de drawer duplicada de producao.js em favor do
+      drawer.js compartilhado, sem tocar em mais nada)
+- [ ] Bloco C — Fases C1 a C5
+
+---
+
+## Backlog — item novo identificado em 05/07/2026
+
+- [ ] **Filtros da aba "Visão Geral" em Produção** (linha ~140 de
+      producao.html) só têm: Todos, TUI, TUI MAIS, TUI POP. Faltam
+      TUI MAIS-S, TUI POP-S, TUI MAIS-LS. Diferente do formulário
+      de embalagem em si (que já tem os 5 modelos corretos) — isso
+      é o filtro da TABELA de estoque detalhado, dentro da aba.
+      Baixo risco, prompt isolado quando houver janela.
+
+---
+
+## Drawer universal — Fase 2 (Produção) · Concluído (05/07/2026)
+
+Migração de maior risco da sequência, concluída sem regressão.
+Teste decisivo repetido: `elementFromPoint` no centro de cada
+botão do formulário confirma `pointer-events:none` no overlay
+fechado — o bug crítico do Prompt 1 não retornou.
+
+Todas as 4 páginas de conteúdo (Produção, Saídas, Estoque, Peças)
+agora compartilham header+drawer via base.html. Landing segue
+standalone por decisão registrada. drawer.js é a única fonte da
+lógica de abrir/fechar.
+
+**Achado confirmado (não é regressão):** bug do botão Cancelar
+do modal "Nova Edição" (querySelector global captura o Cancelar
+do edit-modal primeiro) é pré-existente, já estava documentado.
+Fix conhecido: escopar `addEdicaoModal.querySelector('.btn-cancel-modal')`.
+
+**Dados de teste no banco:** 1x produção TUI MAIS-S BRANCO
+(estoque) + 1x assistência TUI MAIS. Reversíveis pela tela de
+Produção.
+
+### Status da fila
+- [x] Drawer Fase 1 (Saídas, Estoque, Peças)
+- [x] Drawer Fase 2 (Produção)
+- [x] Fix — botão Cancelar do modal Nova Edição (concluído 05/07/2026)
+- [x] Fix — filtros de modelo na Visão Geral (concluído 05/07/2026)
+- [ ] Bloco C — Fases C1 a C5
+
+---
+
+## Fix — Cancelar do modal Nova Edição · Concluído (05/07/2026)
+
+`btnCancelModal` reescopado para `addEdicaoModal.querySelector(...)`
+em vez de `document.querySelector(...)` global. Testado: Nova
+Edição fecha pelo Cancelar, salva via fetch normalmente, e
+edit-modal (não tocado) continua fechando pelo seu próprio
+Cancelar — sem regressão.
+
+**Dado de teste no banco:** edição "TESTE-CANCEL-FIX-4" criada
+via fluxo real de salvar. Inofensiva, removível manualmente pela
+tela se desejar.
+
+---
+
+## Fix — filtros de modelo na Visão Geral · Concluído (05/07/2026)
+
+7 botões de filtro agora (Todos, TUI, TUI MAIS, TUI POP,
+TUI MAIS-S, TUI POP-S, TUI MAIS-LS). Nenhum ajuste de regex foi
+necessário — testado ao vivo com números reais (ex: "TUI MAIS"
+mostrou 12/938, não 14/942, confirmando que MAIS-S não vaza).
+JS não foi tocado, só o HTML dos botões.
+
+### Toda a limpeza de backlog concluída
+- [x] Drawer Fase 1 e Fase 2
+- [x] Fix Cancelar modal Nova Edição
+- [x] Fix filtros de modelo
+
+### Próximo: Bloco C — Fase C1 (schema e backend)
+
+---
+
+## Backlog — item novo identificado em 05/07/2026 (Fase C1)
+
+- [ ] **Bug: baixa automática de BOM só considera TUI MAIS/TUI POP**
+      Em app/routes/producao.py, a condição
+      `if modelo_nome in ('TUI MAIS', 'TUI POP'):` está desatualizada.
+      Os 3 modelos novos têm BOM cadastrada mas nunca são consultados
+      ao embalar para estoque normal — peças não são descontadas.
+      Fix: verificar dinamicamente se existe BOM para o modelo
+      (query em vez de tupla fixa), não uma lista hardcoded.
+      Prioridade: corrigir logo, afeta rastreio real de estoque
+      de peças para os modelos novos.
+
+---
+
+## Bloco C — Fase C1 · Design finalizado (05/07/2026)
+
+### Descoberta chave (leitura de scooter.py)
+`registrar_producao()` incrementa DIRETAMENTE `variacoes.estoque_atual`.
+`consultar_estoque()` só lê esse campo. Não existe camada de status.
+Conclusão: NÃO é preciso ajustar `consultar_estoque()` — scooter
+reservada simplesmente nunca toca `estoque_atual`, resolvendo o
+problema na raiz.
+
+### Schema final (revisado — usa variacao_id, não texto solto)
+```sql
+pedidos
+  id, num_pedido, status (RESERVADO|DESPACHADO|CANCELADO),
+  data_criacao, data_despacho
+
+itens_pedido_scooter
+  id, pedido_id (FK), variacao_id (FK), producao_id (FK, rastreio),
+  quantidade
+```
+
+### Decisões confirmadas pelo usuário
+1. Produção reservada AINDA gera log em `producao` (mesma tabela do
+   histórico normal — aparece em Log de Produção e dashboards) —
+   só NÃO incrementa `variacoes.estoque_atual`.
+2. Despacho grava direto em `saidas_estoque` (bypass da checagem/
+   desconto de estoque geral, já que a reserva nunca entrou nele).
+   Isso mantém o log de Saídas unificado (já agrupa por num_pedido).
+3. Confirmar despacho pede o motivo (CLIENTE/REVENDA/FEIRA/
+   BONIFICADO) nesse momento — não é clique único.
+4. Cancelar pedido devolve a scooter ao estoque geral (incrementa
+   estoque_atual de volta) — fisicamente ela já existe, só perdeu
+   o destino. Histórico de produção e o item cancelado são mantidos
+   (não deletados), pedido marca status=CANCELADO.
+5. Peças ficam FORA do escopo do C1 — `movimentacoes_peca` já tem
+   `num_pedido`, reaproveitado na Fase C5.
+6. Editar quantidade de um item ajusta `itens_pedido_scooter` e o
+   `producao` vinculado (delta simples) — NÃO reconcilia peças da
+   BOM retroativamente (mesma limitação que `atualizar_producao()`
+   já tem hoje).
+
+### Novo módulo: app/models/pedido.py
+Segue o padrão de separação por domínio já usado (scooter.py,
+peca.py). Funções: criar_tabelas_pedidos, buscar_ultimo_num_pedido_usado,
+registrar_producao_pedido, listar_pedidos_reservados,
+buscar_pedido_por_numero, confirmar_despacho, cancelar_pedido,
+editar_item_pedido.
