@@ -34,6 +34,41 @@ def criar_tabelas_pedidos():
         )
     """)
 
+    # Migração idempotente (mesmo padrão de custo_unitario em peca.py):
+    # adiciona colunas só se ainda não existirem. Preparação p/ C3/C4.
+    # prioridade: valores válidos 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE'
+    #   (sem CHECK no banco — validação fica na camada de aplicação/UI).
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(pedidos)")]
+    if 'prioridade' not in cols:
+        conn.execute(
+            "ALTER TABLE pedidos ADD COLUMN prioridade TEXT DEFAULT 'MEDIA'"
+        )
+    if 'transportadora' not in cols:
+        conn.execute(
+            "ALTER TABLE pedidos ADD COLUMN transportadora TEXT DEFAULT NULL"
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def atualizar_prioridade_transportadora(pedido_id, prioridade=None,
+                                        transportadora=None):
+    """
+    Atualiza prioridade e/ou transportadora de um pedido.
+    Só atualiza os campos que forem passados (não None).
+    """
+    conn = get_connection()
+    if prioridade is not None:
+        conn.execute(
+            "UPDATE pedidos SET prioridade = ? WHERE id = ?",
+            (prioridade, pedido_id)
+        )
+    if transportadora is not None:
+        conn.execute(
+            "UPDATE pedidos SET transportadora = ? WHERE id = ?",
+            (transportadora, pedido_id)
+        )
     conn.commit()
     conn.close()
 
@@ -133,12 +168,13 @@ def listar_pedidos_reservados():
     lista de itens (JOIN variacoes para trazer nome_completo).
     Formato: lista de dicts
       {'pedido_id':, 'num_pedido':, 'data_criacao':,
+       'prioridade':, 'transportadora':,
        'itens': [{'item_id':, 'nome_completo':, 'quantidade':}]}
     Ordenado por data_criacao DESC.
     """
     conn = get_connection()
     pedidos = conn.execute("""
-        SELECT id, num_pedido, data_criacao
+        SELECT id, num_pedido, data_criacao, prioridade, transportadora
         FROM pedidos
         WHERE status = 'RESERVADO'
         ORDER BY data_criacao DESC
@@ -150,6 +186,8 @@ def listar_pedidos_reservados():
             'pedido_id': p['id'],
             'num_pedido': p['num_pedido'],
             'data_criacao': p['data_criacao'],
+            'prioridade': p['prioridade'],
+            'transportadora': p['transportadora'],
             'itens': _itens_do_pedido(conn, p['id']),
         })
 
@@ -166,7 +204,7 @@ def buscar_pedido_por_numero(num_pedido):
     """
     conn = get_connection()
     pedidos = conn.execute("""
-        SELECT id, num_pedido, data_criacao
+        SELECT id, num_pedido, data_criacao, prioridade, transportadora
         FROM pedidos
         WHERE num_pedido = ? AND status = 'RESERVADO'
         ORDER BY data_criacao DESC
@@ -178,6 +216,8 @@ def buscar_pedido_por_numero(num_pedido):
             'pedido_id': p['id'],
             'num_pedido': p['num_pedido'],
             'data_criacao': p['data_criacao'],
+            'prioridade': p['prioridade'],
+            'transportadora': p['transportadora'],
             'itens': _itens_do_pedido(conn, p['id']),
         })
 

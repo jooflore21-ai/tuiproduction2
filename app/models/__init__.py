@@ -23,6 +23,7 @@ from .peca import (
     entrada_estoque_peca,
     saida_manual_peca,
     baixar_estoque_por_bom,
+    existe_bom_para_modelo,
     consultar_movimentacoes,
     consultar_pecas_criticas,
     consultar_defeitos_para_relatorio,
@@ -39,4 +40,5 @@ from .pedido import (
     confirmar_despacho,
     cancelar_pedido,
     editar_item_pedido,
+    atualizar_prioridade_transportadora,
 )

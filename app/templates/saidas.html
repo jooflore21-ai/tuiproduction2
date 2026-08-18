@@ -203,6 +203,133 @@
             </div>
 
         </div>
+
+        <!-- ── Pedidos reservados aguardando despacho ──────── -->
+        <div class="reports-section" style="margin-top:24px;">
+            <div class="table-header" style="margin-bottom:12px; display:flex; align-items:center;">
+                <h2>Pedidos aguardando despacho</h2>
+                {% if pedidos_reservados %}
+                <span style="
+                    background:var(--primary);
+                    color:#fff;
+                    font-size:0.72rem;
+                    font-weight:700;
+                    padding:2px 8px;
+                    border-radius:99px;
+                    margin-left:8px;
+                ">{{ pedidos_reservados|length }}</span>
+                {% endif %}
+            </div>
+
+            <input type="search" id="search-despacho" class="search-input"
+                   placeholder="Buscar por nº pedido..."
+                   style="width:100%; margin-bottom:12px;">
+
+            {% if pedidos_reservados %}
+            <div id="lista-despacho">
+            {% for pedido in pedidos_reservados %}
+            <div class="pedido-card" style="
+                background:var(--card);
+                border:1px solid var(--border);
+                border-radius:var(--radius);
+                padding:14px 16px;
+                margin-bottom:10px;
+                box-shadow:var(--shadow-sm);
+            " data-num="{{ pedido.num_pedido }}">
+
+                <!-- Cabeçalho -->
+                <div style="display:flex; align-items:center; gap:10px;
+                            flex-wrap:wrap; margin-bottom:10px;">
+                    <strong style="font-size:1rem;">
+                        Pedido {{ pedido.num_pedido }}
+                    </strong>
+
+                    {% set cor_prioridade = {
+                        'BAIXA':   ('var(--success)', '#d1fae5'),
+                        'MEDIA':   ('var(--text-muted)', 'var(--surface)'),
+                        'ALTA':    ('var(--warning)', '#fef3c7'),
+                        'URGENTE': ('var(--danger)', '#fee2e2'),
+                    } %}
+                    {% set c = cor_prioridade.get(
+                        pedido.prioridade,
+                        ('var(--text-muted)', 'var(--surface)')
+                    ) %}
+                    <span style="
+                        background:{{ c[1] }}; color:{{ c[0] }};
+                        font-size:0.72rem; font-weight:700;
+                        padding:2px 8px; border-radius:99px;
+                    ">{{ pedido.prioridade or 'MEDIA' }}</span>
+
+                    {% if pedido.transportadora %}
+                    <span style="font-size:0.8rem; color:var(--text-muted);">
+                        🚚 {{ pedido.transportadora }}
+                    </span>
+                    {% endif %}
+
+                    <span style="
+                        font-size:0.78rem;
+                        color:var(--text-muted);
+                        margin-left:auto;
+                    ">{{ pedido.data_criacao }}</span>
+                </div>
+
+                <!-- Itens -->
+                <ul style="margin:0 0 12px 0; padding-left:18px;
+                           font-size:0.88rem;">
+                    {% for item in pedido.itens %}
+                    <li>{{ item.quantidade }}× {{ item.nome_completo }}</li>
+                    {% endfor %}
+                </ul>
+
+                <!-- Form de despacho -->
+                <form method="POST"
+                      action="{{ url_for('saida.despachar_pedido',
+                                         pedido_id=pedido.pedido_id) }}"
+                      style="display:flex; gap:8px; align-items:center;
+                             flex-wrap:wrap; background:none;
+                             box-shadow:none; margin:0; padding:0;">
+                    <div style="display:flex; gap:6px;
+                                align-items:center; flex-wrap:wrap;">
+                        <label style="font-size:0.82rem;
+                                      color:var(--text-muted);
+                                      white-space:nowrap;">
+                            Motivo:
+                        </label>
+                        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                            {% for m in ['CLIENTE','REVENDA','FEIRA','BONIFICADO'] %}
+                            <label style="cursor:pointer;">
+                                <input type="radio" name="motivo" value="{{ m }}"
+                                       {% if loop.first %}checked{% endif %}
+                                       style="display:none;"
+                                       class="motivo-radio-despacho">
+                                <span class="btn" style="
+                                    font-size:0.78rem; padding:5px 10px;
+                                    height:auto; line-height:1.2;
+                                ">{{ m }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-submit"
+                            style="height:34px; font-size:0.82rem;
+                                   padding:0 14px; margin-left:auto;">
+                        ✓ Confirmar despacho
+                    </button>
+                </form>
+
+            </div>
+            {% endfor %}
+            </div>
+
+            {% else %}
+            <p style="text-align:center; color:var(--text-muted);
+                      padding:24px; font-size:0.9rem;">
+                Nenhum pedido aguardando despacho.
+            </p>
+            {% endif %}
+        </div>
+        <!-- ── Fim pedidos aguardando despacho ──────────────── -->
+
     </div>
 
     <!-- Modal: Editar Saída -->

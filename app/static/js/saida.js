@@ -158,6 +158,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ===========================================================
+    // DESPACHO: radios de motivo com estilo visual
+    // ===========================================================
+    document.querySelectorAll('.motivo-radio-despacho').forEach(radio => {
+        if (radio.checked) {
+            radio.nextElementSibling.classList.add('active');
+        }
+        radio.addEventListener('change', function () {
+            this.closest('form')
+                .querySelectorAll('.motivo-radio-despacho + span')
+                .forEach(s => s.classList.remove('active'));
+            this.nextElementSibling.classList.add('active');
+        });
+    });
+
+    // ===========================================================
+    // DESPACHO: busca nos cards de pedido
+    // ===========================================================
+    const searchDespacho = document.getElementById('search-despacho');
+    if (searchDespacho) {
+        searchDespacho.addEventListener('input', function () {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('#lista-despacho .pedido-card')
+                .forEach(card => {
+                    card.style.display =
+                        card.dataset.num.toLowerCase().includes(q) ? '' : 'none';
+                });
+        });
+    }
+
+    // ===========================================================
     // MEMÓRIA DE SCROLL
     // ===========================================================
     const savedPosition = localStorage.getItem('scrollPosition');

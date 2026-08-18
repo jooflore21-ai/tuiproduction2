@@ -118,13 +118,16 @@ def saidas():
         'cores_css': models.CORES_CSS,
     }
 
+    pedidos_reservados = models.listar_pedidos_reservados()
+
     return render_template(
         'saidas.html',
         log_pedidos=log_pedidos,
         form_data=form_data,
         periodo_selecionado=periodo_selecionado,
         data_inicio=data_inicio,
-        data_fim=data_fim
+        data_fim=data_fim,
+        pedidos_reservados=pedidos_reservados,
     )
 
 
@@ -135,6 +138,27 @@ def excluir_saida(id_saida):
         flash('Registro de saída excluído com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir registro: {e}', 'error')
+    return redirect(url_for('saidas'))
+
+
+@saida_bp.route('/pedidos/<int:pedido_id>/despachar', methods=['POST'])
+def despachar_pedido(pedido_id):
+    motivo = request.form.get('motivo', '').strip().upper()
+    MOTIVOS_VALIDOS = ['CLIENTE', 'REVENDA', 'FEIRA', 'BONIFICADO']
+    if motivo not in MOTIVOS_VALIDOS:
+        flash('Motivo inválido para despacho.', 'error')
+        return redirect(url_for('saidas'))
+    try:
+        resultado = models.confirmar_despacho(pedido_id, motivo)
+        flash(
+            f"Pedido {resultado['num_pedido']} despachado com sucesso! "
+            f"{resultado['itens_despachados']} item(s) registrado(s) "
+            f"na saída.", 'success'
+        )
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Erro ao despachar pedido: {e}', 'error')
     return redirect(url_for('saidas'))
 
 

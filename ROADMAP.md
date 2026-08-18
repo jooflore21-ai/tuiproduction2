@@ -446,3 +446,391 @@ peca.py). Funções: criar_tabelas_pedidos, buscar_ultimo_num_pedido_usado,
 registrar_producao_pedido, listar_pedidos_reservados,
 buscar_pedido_por_numero, confirmar_despacho, cancelar_pedido,
 editar_item_pedido.
+
+---
+
+## Bloco C — Fase C1 · Concluído (07/07/2026)
+
+`app/models/pedido.py` criado com 8 funções + 2 helpers privados.
+Todos os 10 testes passaram com valores reais do banco (não só
+"passou" — números conferidos: estoque inalterado na reserva,
+BOM descontada corretamente até nos modelos novos, despacho grava
+em saidas_estoque, cancelamento devolve ao estoque geral).
+
+### Decisões de implementação registradas
+- `edicao_id = 1` fixado em `_resolver_variacao_id` (única edição
+  existente hoje; evita ambiguidade se surgirem outras)
+- Retornos estruturados (dicts) em confirmar_despacho/cancelar_pedido/
+  editar_item_pedido — úteis para mensagens de flash em C2-C4
+- `saidas_estoque.observacao` fica NULL no despacho (coluna aceita)
+
+**Dados de teste no banco:** pedidos TESTE-C1-001 (DESPACHADO),
+C1-002 e C1-003 (CANCELADO), C1-POP (RESERVADO) + registros
+correspondentes em producao/saidas_estoque. Histórico de teste,
+reversível se quiser.
+
+### Status da fila
+- [x] Bloco C — Fase C1 (schema e backend)
+- [x] Bloco C — Addendum: prioridade + transportadora em pedidos (concluído 07/07/2026)
+- [x] Bloco C — Fase C2 (produção: tipo Pedido + modal) — concluído 07/07/2026
+- [x] Bloco C — Fase C3 (produção: aba Pedidos) — concluído 07/07/2026
+- [ ] Bloco C — Fase C4 (saída: bloco de despacho)
+- [ ] Bloco C — Fase C5 (peças no mesmo pedido)
+
+---
+
+# ═══════════════════════════════════════════════════
+# VISÃO DE LONGO PRAZO — MES / Ferramentaria / Integração
+# Iniciado em 07/07/2026 · APENAS PLANEJAMENTO, sem código
+# ═══════════════════════════════════════════════════
+
+Conversa com o diretor de operações antes das férias dele gerou
+uma expansão de escopo grande. Registrando aqui ANTES de detalhar
+qualquer parte, para não perder nenhuma ideia.
+
+## [Visão] Ferramentaria — controle de WIP (Work In Progress)
+
+Hoje o sistema só sabe "peça consumida" ou "peça em estoque"
+(binário). Falta rastrear o ESTADO de cada peça em fabricação
+interna, com uma etapa terceirizada no meio (pintura, outra
+cidade). Estados mencionados até agora:
+  - Tubo (matéria-prima, chega em container)
+  - Tubo dobrado
+  - Quadro/chassis soldado
+  - Garfo pronto
+  - → ENVIO para pintura (outra cidade, terceirizado)
+  - ← RETORNO da pintura
+  - Chassis com suspensão pronto (2-3x o tempo de montar
+    um chassis sem suspensão — modelos -S/-LS)
+
+**Ainda não sei:** quantas etapas reais existem, quem opera cada
+uma, como a ida/volta da pintura é rastreada hoje (prazo, perdas,
+atrasos), se cada etapa tem um "responsável" que precisa ver
+uma fila de trabalho.
+
+## [Visão] Compras — planejamento antecipado
+
+Objetivo: comprar com mais antecedência custa menos por unidade.
+Precisa cruzar consumo histórico real (já temos: Bloco B do
+dashboard, comparativo de meses) com lead time do fornecedor
+chinês, para sugerir QUANDO e QUANTO comprar.
+
+## [Visão] Prioridade manual de pedido (era "Integração ERP")
+
+Ideia: quando um pedido é registrado no Microssys, disparar
+alerta via API para:
+  - Encarregado de produção (confirma se há estoque de
+    embaladas ou se precisa produzir)
+  - Setor de almoxarifado
+  - Checkpoints intermediários: pedido foi aceito pela
+    qualidade? está na esteira de produção?
+  - Alerta específico de "montagem de paralama necessária
+    para modelo X" — conecta direto com o chão de fábrica
+
+## [Visão] Alertas por setor
+
+- Setor de embalagem testa carregadores quando há pedido de
+  carregador — alerta na tela deles quando isso acontece
+- Padrão geral: alertas que aceleram sem virar cobrança —
+  ninguém precisa "ir pedir", o sistema avisa sozinho
+
+## [Visão] Logística de expedição
+
+Pedidos de transportadoras diferentes (Rodonaves, Coppex, etc.)
+precisam ser sinalizados para separação no MESMO pallet — evita
+misturar carga de transportadoras diferentes.
+
+## [Visão] Dispositivos por setor
+
+- Almoxarifado → tablet (precisa de visão mais ampla de tela)
+- Outros setores → celulares sobrando disponíveis para teste
+- Ainda a definir: quais setores usam qual dispositivo
+
+## Ordem de ataque sugerida (a validar com o usuário)
+
+1. Ferramentaria primeiro — é a base física que
+   falta modelar; sem isso, os Blocos C/D (alertas) não têm
+   "estado" nenhum para alertar sobre
+2. Compras depois — já tem boa base no dashboard,
+   só falta a camada de sugestão
+3. Integração ERP + Alertas + Logística — dependem
+   de A estar modelado, e de decisões de infraestrutura (API
+   do Microssys, quem tem acesso a quê)
+4. Dispositivos — decisão de compra/distribuição,
+   não é código
+
+## REGRA: nada disso vira prompt até estar bem entendido
+
+Esta seção é só mapa. Cada bloco precisa da mesma disciplina
+que aplicamos no resto do projeto: entender o processo real
+antes de desenhar schema, perguntar até não haver ambiguidade,
+só então executar em fases pequenas.
+
+## Respostas coletadas — [Visão] Ferramentaria
+1. Corte é seção separada (não é a mesma pessoa que dobra)
+2. Dobra e solda: pessoas/estações diferentes
+3. Perda existe e é importante rastrear — causas via entrevista
+
+## Respostas coletadas — [Visão] Compras
+
+**Descoberta importante:** existem DUAS cadeias de suprimento
+distintas, não uma só:
+  - Kit importado da China (820 kits/2 containers, fornecedor
+    G-LUX/Jordan) — só itens classificados como "importados"
+  - Matéria-prima NACIONAL (tubos, placas de ferro para detalhes
+    do garfo/tampas/pedais) — comprada no Brasil, alimenta a
+    ferramentaria (Bloco A). Planilha do diretor de operações
+    tem as dimensões dos tubos e vai explicar melhor esse lado.
+
+**Risco central:** erro de conta na compra nacional gera compra
+emergencial mais cara com prazo mínimo de entrega — o oposto do
+que se quer (comprar grande/antecipado = mais barato).
+
+**Flexibilidade do pedido chinês:** os 820 kits são só a base
+importada, mas dá pra pedir mais peças no mesmo pedido, ou peças
+avulsas específicas (ex: manete do freio) fora do ciclo do kit.
+Já existe suporte pra isso no sistema (entrada de peça com
+quantidade editável). Registros de DEFEITO (já implementados)
+servem de base para decidir quanto trocar com o fornecedor
+(garantia) vs. quanto pedir a mais por erro interno.
+
+**Paralama — pedido por cor sob demanda:** sempre um total de
+1000 pares por pedido, distribuído por cor conforme uma lista que
+o usuário monta e envia ANTES da proforma ser fechada. Existe
+planilha própria de controle de quantidade tem/precisa para
+paralama. **Gap identificado:** possivelmente não há controle de
+defeitos cosméticos (arranhões) em paralama — a verificar.
+**Conexão direta:** o gráfico "Variação mais embalada" do
+dashboard (Bloco B do sistema, já entregue) é exatamente o dado
+que deveria informar essa lista de cores enviada ao fornecedor.
+
+**Tempo:** ~2 meses do pedido à chegada (a confirmar com precisão).
+
+**Cadência e trava:** peças importadas costumam ser pedidas 2x/mês,
+mas a compra pode atrasar se não houver caixa disponível — ou
+seja, a decisão de comprar é travada por fluxo de caixa, não só
+por nível de estoque.
+
+**Sazonalidade — prazo real de planejamento:** fim de outubro até
+meados de fevereiro é altíssima temporada (marketplaces e revenda
+muito fortes). Ano passado tinham estoque suficiente; este ano
+precisam carregar o estoque ANTES desse período. Estamos em julho
+— ainda há tempo, mas o relógio já está correndo.
+
+**Confirmado:** compra nacional (tubos/placas) é frente totalmente
+separada do circuito chinês — não entra na mesma lógica do Bloco B.
+
+**Achado novo:** existia algum controle de tubos/placas que a
+produção parou de usar — precisa ser reimplementado e voltar a
+ser funcional. Urgência real: o usuário também vai tirar férias
+em breve e quer isso rodando antes/durante, para já estar fazendo
+diferença quando ele voltar. Perguntar: data da viagem, e o que
+exatamente era esse controle que caiu em desuso (planilha, papel,
+outra ferramenta?).
+
+**Confirmado (item 3):** o motivo de menos estoque este ano foi o
+tempo investido em projetar/executar os modelos com suspensão
+(MAIS-S/POP-S/MAIS-LS) — agora prontos, produção e vendas
+começando. Isso explica a urgência de carregar estoque antes da
+alta temporada (out-fev).
+
+---
+
+## Plano de ativação física (14 dias — volta das férias)
+
+Objetivo: provar valor do projeto aos diretores, colocando em uso
+real na fábrica o que já está pronto e estável:
+  - Registro de Produção (5 modelos, drawer, mobile-first)
+  - Registro de Saída (motivos novos, mesmo grid de modelos)
+  - Estoque de Peças (entrada/saída/movimentações/defeitos)
+  - Dashboard de Estoque (KPIs, comparativo de meses)
+
+Treinamento é conduzido pelo próprio usuário — já ensinou 1 membro
+da embalagem, falta almoxarifado (novo) e relembrar o encarregado
+(já usou antes). Não é responsabilidade desta IA preparar material
+de treinamento — usuário já tem essa habilidade coberta.
+
+Contexto: o controle antigo que a produção usava era só de "TUI
+embalada" (não de tubo/placa) e parou por causa de máquina
+inacessível durante mudança de local, numa época anterior ao
+trabalho conjunto (usava Gemini antes). Não foi problema de
+adoção/treinamento — é seguro reativar.
+
+**Ferramentaria (Bloco A) e Bloco C (pedido unificado) seguem em
+ritmo calmo, planejados por celular e implementados no notebook
+via Claude Code quando houver tempo — sem pressa de prazo fixo.**
+
+### Simplificação importante (07/07/2026)
+
+Microssys é sistema comprado, industrial (cadastros/pedidos/
+faturamento). Ninguém administra formalmente, mas o usuário é
+quem mais usou/imprimiu relatórios de lá — teria acesso se
+precisasse. NÃO existe API nem integração automática planejada
+por enquanto, e **não precisa existir**: a solução é manual.
+
+**Ideia validada:** quem registra o pedido no Microssys vai até
+o NOSSO sistema e marca a prioridade daquele pedido. Almoxarifado
+e encarregado veem essa prioridade na aba "Pedidos" (mesma que já
+estamos construindo no C3 do pedido unificado).
+
+**Isso deixa de ser "visão de longo prazo" e vira uma extensão
+barata do Bloco C que já está em andamento** — só precisa de um
+campo `prioridade` na tabela `pedidos` e exibição na aba C3.
+Não é integração externa, é feature interna simples.
+
+A ideia de integração automática via API com o Microssys fica
+registrada como possibilidade futura, sem necessidade de agir.
+
+### Detalhes fechados — Prioridade manual de pedido
+
+- Níveis: BAIXA, MÉDIA, ALTA, URGENTE
+- Edição: qualquer pessoa por enquanto (sem restrição). Futuro:
+  usuários/permissões — hoje o sistema não tem autenticação
+  nenhuma (decisão de design original, rede interna aberta).
+  Se permissões por usuário virarem necessidade real, é uma
+  mudança de arquitetura maior (login, papéis) — não é trivial
+  como os campos de prioridade.
+- Dados extras a trazer do Microssys manualmente (futuro mais
+  distante que a Ferramentaria): nome do cliente, status de
+  faturamento, possivelmente localização para dashboard mais
+  robusto. Conecta com a ideia de logística por transportadora
+  (Rodonaves/Coppex) já registrada.
+
+### Prioridade de execução confirmada
+Ferramentaria > Compras > Prioridade de pedido (barata, já
+encaixa no C3) > tudo o mais (Alertas por setor, Logística,
+Dispositivos, dados extra do Microssys)
+
+## Respostas coletadas — [Visão] Alertas por setor
+
+1. Carregador: maioria é venda separada de peça avulsa (cliente
+   e revenda pedem com frequência). Registrado no Microssys.
+2. Garfo é um caso parecido — depende da ferramentaria ter pronto
+   separado, montado depois de pintado. CONFIRMADO: mesmo padrão
+   do carregador — "precisa preparar X garfos" (ação direta, não
+   aviso de disponibilidade).
+3. Alerta confirmado — minimalista por design: tela de produção
+   mostra só "precisa de X carregadores testados". Número de
+   pedido e prioridade NÃO aparecem ali — isso é preocupação do
+   almoxarifado, não da produção. Princípio: cada papel vê só o
+   que precisa agir, não tudo.
+
+## Respostas coletadas — [Visão] Logística de expedição
+
+4. Pallet = juntar pedidos DIFERENTES da mesma transportadora,
+   e isso vale especificamente para PEDIDOS RESERVADOS (conecta
+   direto com o pedido unificado C1-C5 já em andamento).
+5. Transportadora: às vezes não aparece no Microssys — precisa
+   ser campo manual/editável, mesmo padrão da prioridade.
+6. Volume constante e alto, ainda maior na alta temporada.
+
+**Conexão confirmada:** `pedidos` (tabela já criada na C1) vai
+ganhar, no futuro, DOIS campos manuais editáveis: `prioridade`
+e `transportadora`. Os dois nascem juntos quando chegarmos na
+aba "Pedidos" (C3) — não são features separadas, é o mesmo
+lugar da tela.
+
+## Respostas coletadas — [Visão] Dispositivos por setor
+
+7. Tablet: incerto se existe algum disponível. Celulares: 2 de
+   sobra confirmados. Alguns funcionários mais responsáveis podem
+   usar o próprio celular pessoal (BYOD) — nota: sem autenticação
+   no sistema, isso é aceitável hoje (rede interna), mas vale
+   lembrar se algum dia entrar dado sensível.
+
+8. Ordem de rollout de dispositivo/uso, por setor:
+   1º Almoxarifado, Encarregado, Embalagem (assim que o usuário
+      voltar de férias)
+   2º Montagem de paralamas
+   3º Estoque da ferramentaria
+
+**Decisão de design registrada:** Ferramentaria deve ter PÁGINA
+PRÓPRIA no sistema, seguindo o mesmo padrão visual/estrutural da
+página de Produção/Embalagem (mobile-first, drawer, etc.) — não
+é uma aba dentro de outra tela, é uma rota nova quando chegarmos
+nessa fase.
+
+### Visão de longo prazo — mapeamento inicial concluído (07/07/2026)
+Todos os 6 domínios (Ferramentaria, Compras, Prioridade/
+Transportadora de pedido, Alertas por setor, Logística,
+Dispositivos) têm perguntas respondidas ou entrevista rascunhada.
+Pronto para retomar execução do que já está em andamento.
+
+---
+
+## Bloco C — Addendum prioridade/transportadora · Concluído (07/07/2026)
+
+Colunas `prioridade` (default MEDIA) e `transportadora` (default
+NULL) adicionadas a `pedidos` via migração idempotente. Função
+`atualizar_prioridade_transportadora()` criada e testada
+isoladamente. Zero uso em UI ainda — pura preparação para C3/C4,
+sem risco de migração futura numa tabela já com dados reais.
+
+**Dados de teste:** TESTE-C1-001 ficou com prioridade=URGENTE,
+transportadora=Correios (teste da função). Pedido TESTE-ADDENDUM
+criado (RESERVADO). Reversível se quiser.
+
+---
+
+## Bloco C — Fase C2 · Concluído (07/07/2026)
+
+Tipo "Pedido" no formulário de produção, com modal de número
+(pré-preenchido com o último usado), fix do bug de chassis do
+TUI POP-S (não casava em nenhuma condição antes), fallback pro
+tipo "Estoque" quando o operador cancela o modal.
+
+Testado com test_client (backend, valores reais do banco) +
+browser real (fluxo de modal completo, incluindo o caso de
+campo vazio e o cancelamento).
+
+**Bug já conhecido, RECONFIRMADO neste prompt (não corrigido,
+propositalmente fora de escopo):** a baixa automática de BOM no
+ramo "Estoque" continua restrita a `('TUI MAIS','TUI POP')` —
+os 3 modelos novos não descontam peça quando embalados
+diretamente pro estoque (só funciona no fluxo "Pedido", que usa
+`_tem_bom` dinâmico). Já estava no backlog desde a C1; agora
+foi visto de novo, no mesmo arquivo que acabamos de editar —
+bom momento pra corrigir antes de seguir pra C3.
+
+**Dados de teste:** pedidos C2-PEDIDO-A/B, C2-UI-CONFIRM
+(reservados); produções de teste nos 5 modelos; 1 assistência.
+Reversíveis.
+
+### Status da fila
+- [x] Bloco C — Fase C1, Addendum, Fase C2
+- [x] Fix — BOM restrita a 2 modelos no fluxo Estoque — concluído 07/07/2026
+- [x] Bloco C — Fase C3 (produção: aba Pedidos) — concluído 07/07/2026
+
+---
+
+## Fix — BOM dinâmica no fluxo Estoque · Concluído (07/07/2026)
+
+`existe_bom_para_modelo()` criada em peca.py (pública). Produção
+normal (fluxo Estoque) agora desconta peças para os 5 modelos,
+não só os 2 originais. Prova: amortecedor (×4 na BOM de -S) e
+quadro comprido (×1 na BOM de -LS) descontaram corretamente.
+
+---
+
+## Bloco C — Fase C3 · Concluído (07/07/2026)
+
+4ª aba "Pedidos" na produção: lista de reservados com badge de
+prioridade colorido (BAIXA verde/MEDIA cinza/ALTA amarelo/
+URGENTE vermelho), transportadora, itens, edição inline e
+cancelamento com devolução ao estoque.
+
+Achado e corrigido: `listar_pedidos_reservados` não retornava
+`prioridade`/`transportadora` (gap C1→addendum). Adição mínima
+ao SELECT. Mesma correção pendente em `buscar_pedido_por_numero`
+— antecipada para a C4.
+
+`setupLiveSearch` não reaproveitado (é table-specific) — busca
+inline simples por `data-num` nos `.pedido-card`.
+
+Dados de teste: C3-URGENTE (RESERVADO/JadLog), C3-ALTA (editado
+→MEDIA/Correios), C3-BAIXA (cancelado, estoque devolvido).
+
+### Status da fila
+- [x] C1, Addendum, C2, Fix BOM, C3
+- [x] Bloco C — Fase C4 (saída: bloco de despacho) — concluído 17/08/2026
+- [ ] Bloco C — Fase C5 (peças no mesmo pedido)

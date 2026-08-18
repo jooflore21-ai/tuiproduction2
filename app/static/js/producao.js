@@ -418,6 +418,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupLiveSearch(null, 'search-assistencia', 'table-assistencia', 'total-assistencia');
 
+    // Busca da aba "Pedidos": a lista usa .pedido-card (divs), não uma
+    // tabela — setupLiveSearch é específico de 'tbody tr', então aqui vai
+    // uma busca inline simples por número de pedido (data-num).
+    const searchPedidos = document.getElementById('search-pedidos');
+    if (searchPedidos) {
+        searchPedidos.addEventListener('input', function () {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('#lista-pedidos-reservados .pedido-card')
+                .forEach(card => {
+                    card.style.display =
+                        card.dataset.num.toLowerCase().includes(q) ? '' : 'none';
+                });
+        });
+    }
+
     
 
     // --- INICIALIZAÇÃO ---
@@ -443,4 +458,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Chama a função uma vez no início para configurar o estado inicial do formulário
     updateFormState();
+
+    // ── Tipo "Pedido": intercepta o submit e pede o número do pedido ──
+    const productionForm = document.getElementById('production-form');
+    const modalNumPedido = document.getElementById('modal-num-pedido');
+    const inputNumPedido = document.getElementById('input-num-pedido');
+    const numPedidoHidden = document.getElementById('num_pedido_hidden');
+    const erroNumPedido = document.getElementById('erro-num-pedido');
+    const btnConfirmarPedido = document.getElementById('btn-confirmar-pedido');
+    const btnCancelarPedido = document.getElementById('btn-cancelar-pedido');
+
+    let pedidoConfirmado = false;
+
+    if (productionForm && modalNumPedido) {
+        productionForm.addEventListener('submit', function (e) {
+            const tipo = tipoRegistroSelect.value;
+            if (tipo === 'pedido' && !pedidoConfirmado) {
+                e.preventDefault();
+                erroNumPedido.style.display = 'none';
+                modalNumPedido.style.display = 'flex';
+            }
+        });
+
+        btnConfirmarPedido.addEventListener('click', function () {
+            const valor = inputNumPedido.value.trim();
+            if (!valor) {
+                erroNumPedido.style.display = 'block';
+                return;
+            }
+            numPedidoHidden.value = valor;
+            modalNumPedido.style.display = 'none';
+            pedidoConfirmado = true;
+            productionForm.requestSubmit();
+        });
+
+        btnCancelarPedido.addEventListener('click', function () {
+            modalNumPedido.style.display = 'none';
+            tipoRegistroSelect.value = 'estoque';
+            updateFormState();
+            productionForm.requestSubmit();
+        });
+
+        modalNumPedido.addEventListener('click', function (e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+    }
 });

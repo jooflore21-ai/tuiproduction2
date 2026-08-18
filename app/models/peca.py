@@ -574,6 +574,22 @@ def baixar_estoque_por_bom(modelo, cor_scooter, quantidade_scooters):
     conn.close()
 
 
+def existe_bom_para_modelo(modelo_nome):
+    """
+    Verifica dinamicamente se existe BOM cadastrada para o
+    modelo (query em `bom`, não lista fixa). Usada pelo fluxo
+    de produção normal (Estoque) para decidir se deve baixar
+    peças automaticamente — mesmo princípio do _tem_bom()
+    privado em pedido.py, mas exposta publicamente aqui.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT 1 FROM bom WHERE modelo = ? LIMIT 1", (modelo_nome,)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 # ──────────────────────────────────────────────
 # RELATÓRIOS
 # ──────────────────────────────────────────────

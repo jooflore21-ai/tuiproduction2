@@ -28,11 +28,11 @@ def producao():
                 # Constrói o nome completo da variação
                 cor_chassis = None
                 nome_completo = modelo_nome
-                if modelo_nome == 'TUI POP':
+                if modelo_nome in ('TUI POP', 'TUI POP-S'):
                     cor_chassis = request.form.get('cor_chassis')
                     cor_paralama = request.form.get('cor_paralama')
                     nome_completo = f"{modelo_nome} {cor_paralama}"
-                elif modelo_nome in ['TUI', 'TUI MAIS']:
+                elif modelo_nome in ('TUI', 'TUI MAIS', 'TUI MAIS-S', 'TUI MAIS-LS'):
                     cor_paralama = request.form.get('cor_paralama')
                     nome_completo = f"{modelo_nome} {cor_paralama}"
 
@@ -42,9 +42,9 @@ def producao():
                     edicao_id=edicao_id,
                     quantidade=quantidade)
 
-                # Baixa automática das peças da BOM
-                # Só executa para TUI MAIS e TUI POP (modelos com BOM cadastrada)
-                if modelo_nome in ('TUI MAIS', 'TUI POP'):
+                # Baixa automática das peças da BOM — verificação dinâmica
+                # (existe_bom_para_modelo cobre os 5 modelos com BOM cadastrada)
+                if models.existe_bom_para_modelo(modelo_nome):
                     models.baixar_estoque_por_bom(
                         modelo=modelo_nome,
                         cor_scooter=cor_paralama,
@@ -59,6 +59,30 @@ def producao():
                 # Para assistência, usamos apenas o nome do modelo_nome
                 models.registrar_assistencia(modelo_nome, quantidade)
                 flash(f'{quantidade} unidade(s) de "{modelo_nome}" registrada(s) para assistência com sucesso!', 'success')
+
+            # --- Ramo 3: Registro para PEDIDO (reserva) ---
+            elif tipo_registro == 'pedido':
+                num_pedido = request.form.get('num_pedido', '').strip()
+                cor_chassis = None
+                if modelo_nome in ('TUI POP', 'TUI POP-S'):
+                    cor_chassis = request.form.get('cor_chassis')
+
+                if not num_pedido:
+                    flash('Número de pedido é obrigatório.', 'error')
+                    return redirect(url_for('producao', **request.args))
+
+                resultado = models.registrar_producao_pedido(
+                    modelo_nome=modelo_nome,
+                    cor_paralama=cor_paralama,
+                    cor_chassis=cor_chassis,
+                    quantidade=quantidade,
+                    num_pedido=num_pedido,
+                )
+                flash(
+                    f"{quantidade}x '{modelo_nome} {cor_paralama}' "
+                    f"reservado(s) para o pedido {resultado['num_pedido']}!",
+                    'success'
+                )
 
         except ValueError as e:
             # Captura erros de conversão de número ou de produto não encontrado
@@ -98,6 +122,12 @@ def producao():
     estoque_detalhado = models.consultar_estoque()
 
     edicoes = models.listar_edicoes()
+
+    # Último nº de pedido usado — pré-preenche o modal do tipo "Pedido"
+    ultimo_num_pedido = models.buscar_ultimo_num_pedido_usado()
+
+    # Pedidos reservados aguardando despacho (aba "Pedidos")
+    pedidos_reservados = models.listar_pedidos_reservados()
 
     # --- Formata a data para cada item ---
     for item in producao_lista:
@@ -142,7 +172,9 @@ def producao():
         form_data=form_data,
         periodo_selecionado=periodo_selecionado,
         aba_ativa=aba_ativa,
-        edicoes=edicoes
+        edicoes=edicoes,
+        ultimo_num_pedido=ultimo_num_pedido,
+        pedidos_reservados=pedidos_reservados,
     )
 
 
@@ -206,3 +238,33 @@ def nova_edicao():
     except Exception as e:
         # Trata o caso de o nome já existir (UNIQUE constraint)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@producao_bp.route('/pedidos/<int:pedido_id>/prioridade', methods=['POST'])
+def atualizar_pedido(pedido_id):
+    try:
+        prioridade     = request.form.get('prioridade', '').strip() or None
+        transportadora = request.form.get('transportadora', '').strip() or None
+        models.atualizar_prioridade_transportadora(
+            pedido_id, prioridade=prioridade, transportadora=transportadora
+        )
+        flash('Pedido atualizado com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao atualizar pedido: {e}', 'error')
+    return redirect(url_for('producao', aba='pedidos'))
+
+
+@producao_bp.route('/pedidos/<int:pedido_id>/cancelar', methods=['POST'])
+def cancelar_pedido_route(pedido_id):
+    try:
+        resultado = models.cancelar_pedido(pedido_id)
+        flash(
+            f"Pedido {resultado['num_pedido']} cancelado. "
+            f"{resultado['itens_devolvidos']} item(s) devolvido(s) "
+            f"ao estoque.", 'success'
+        )
+    except ValueError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Erro ao cancelar pedido: {e}', 'error')
+    return redirect(url_for('producao', aba='pedidos'))
