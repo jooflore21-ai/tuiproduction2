@@ -17,84 +17,81 @@ CORES_CSS = {
     "VERMELHO":"#d60202",
 }
 
+DATA_HORA_FMT = "YYYY-MM-DD HH24:MI:SS"
+
 # ------------------------------
 # Criação de tabelas
 # ------------------------------
 def criar_tabelas():
+    """
+    CREATE TABLE IF NOT EXISTS em todas — nunca dropa tabela existente.
+    Redundante com app/migrate_to_postgres.py (que já cria o schema),
+    mas mantido para o app subir sozinho em um Postgres vazio.
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS produtos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             sku TEXT UNIQUE NOT NULL,
             nome TEXT NOT NULL
         );
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS edicoes (
+            id SERIAL PRIMARY KEY,
+            nome TEXT UNIQUE NOT NULL
+        );
+    """)
+    cursor.execute(
+        "INSERT INTO edicoes (id, nome) VALUES (1, 'Padrão') "
+        "ON CONFLICT (id) DO NOTHING"
+    )
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS variacoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            produto_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            produto_id INTEGER NOT NULL REFERENCES produtos(id),
             cor_chassis TEXT,
             cor_paralama TEXT,
             nome_completo TEXT UNIQUE NOT NULL,
             estoque_atual INTEGER NOT NULL DEFAULT 0,
             data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (produto_id) REFERENCES produtos (id)
+            edicao_id INTEGER REFERENCES edicoes(id) DEFAULT 1
         );
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS producao (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            variacao_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            variacao_id INTEGER NOT NULL REFERENCES variacoes(id),
             quantidade INTEGER NOT NULL,
-            data_hora TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
-            FOREIGN KEY (variacao_id) REFERENCES variacoes (id)
+            data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS assistencia (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            produto_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            produto_id INTEGER NOT NULL REFERENCES produtos(id),
             quantidade INTEGER NOT NULL,
-            data_hora TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
-            FOREIGN KEY (produto_id) REFERENCES produtos (id)
+            data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS saidas_estoque (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            variacao_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            variacao_id INTEGER NOT NULL REFERENCES variacoes(id),
             quantidade INTEGER NOT NULL,
-            motivo TEXT NOT NULL, -- CPF, CNPJ, FEIRA, PRESENTE
-            data_hora TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')),
+            motivo TEXT NOT NULL,
+            data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             observacao TEXT,
-            FOREIGN KEY (variacao_id) REFERENCES variacoes (id)
+            num_pedido TEXT DEFAULT ''
         );
     """)
-
-    try:
-        cursor.execute("ALTER TABLE saidas_estoque ADD COLUMN num_pedido TEXT DEFAULT ''")
-    except Exception:
-        pass
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS edicoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT UNIQUE NOT NULL
-        );
-    """)
-
-    cursor.execute("INSERT OR IGNORE INTO edicoes (id, nome) VALUES (1, 'Padrão')")
-
-    try:
-        cursor.execute("ALTER TABLE variacoes ADD COLUMN edicao_id INTEGER REFERENCES edicoes(id) DEFAULT 1")
-    except Exception:
-        pass
 
     conn.commit()
     conn.close()
@@ -115,7 +112,11 @@ def carregar_variacoes_iniciais():
     ]
 
     for sku, nome in produtos:
-        cursor.execute("INSERT OR IGNORE INTO produtos (sku, nome) VALUES (?, ?)", (sku, nome))
+        cursor.execute(
+            "INSERT INTO produtos (sku, nome) VALUES (%s, %s) "
+            "ON CONFLICT (sku) DO NOTHING",
+            (sku, nome)
+        )
 
     conn.commit()
 
@@ -126,18 +127,26 @@ def carregar_variacoes_iniciais():
                       "LARANJA", "PRATA", "PRETO", "ROSA", "ROXO", "VERDE", "VERMELHO"]
 
     for cor in cores_paralama:
-        cursor.execute("INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
-                       (ids["TUI"], None, cor, f"TUI {cor}"))
-        cursor.execute("INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
-                       (ids["TUI MAIS"], None, cor, f"TUI MAIS {cor}"))
+        cursor.execute(
+            "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
+            (ids["TUI"], None, cor, f"TUI {cor}"))
+        cursor.execute(
+            "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
+            (ids["TUI MAIS"], None, cor, f"TUI MAIS {cor}"))
 
     for cor_chassis in ["PRETO", "BRANCO"]:
         for cor in cores_paralama:
-            cursor.execute("INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
-                           (ids["TUI POP"], cor_chassis, cor, f"TUI POP {cor_chassis} {cor}"))
+            cursor.execute(
+                "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
+                (ids["TUI POP"], cor_chassis, cor, f"TUI POP {cor_chassis} {cor}"))
 
-    cursor.execute("INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
-                   (ids["CAPACETE"], None, None, "CAPACETE"))
+    cursor.execute(
+        "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+        "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
+        (ids["CAPACETE"], None, None, "CAPACETE"))
 
     conn.commit()
     conn.close()
@@ -147,7 +156,7 @@ def carregar_variacoes_modelos_novos():
     """
     Semeia produtos + variacoes dos 3 modelos novos de scooter, seguindo
     exatamente o padrão de carregar_variacoes_iniciais(). Idempotente
-    (INSERT OR IGNORE). Estoque inicial 0 (default da coluna estoque_atual).
+    (ON CONFLICT DO NOTHING). Estoque inicial 0 (default da coluna estoque_atual).
 
       - TUI MAIS-S  → variação só por cor de paralama (12), como família MAIS
       - TUI MAIS-LS → variação só por cor de paralama (12), como família MAIS
@@ -165,7 +174,10 @@ def carregar_variacoes_modelos_novos():
         ("SKU007", "TUI MAIS-LS"),
     ]
     for sku, nome in produtos:
-        cursor.execute("INSERT OR IGNORE INTO produtos (sku, nome) VALUES (?, ?)", (sku, nome))
+        cursor.execute(
+            "INSERT INTO produtos (sku, nome) VALUES (%s, %s) "
+            "ON CONFLICT (sku) DO NOTHING",
+            (sku, nome))
 
     conn.commit()
 
@@ -179,13 +191,15 @@ def carregar_variacoes_modelos_novos():
     for modelo in ("TUI MAIS-S", "TUI MAIS-LS"):
         for cor in cores_paralama:
             cursor.execute(
-                "INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
+                "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
                 (ids[modelo], None, cor, f"{modelo} {cor}"))
 
     # Família POP: chassis fixo PRETO + paralama
     for cor in cores_paralama:
         cursor.execute(
-            "INSERT OR IGNORE INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) VALUES (?, ?, ?, ?)",
+            "INSERT INTO variacoes (produto_id, cor_chassis, cor_paralama, nome_completo) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (nome_completo) DO NOTHING",
             (ids["TUI POP-S"], "PRETO", cor, f"TUI POP-S PRETO {cor}"))
 
     conn.commit()
@@ -212,7 +226,7 @@ def migrar_motivos_saida():
     }
     for antigo, novo in mapeamento.items():
         conn.execute(
-            "UPDATE saidas_estoque SET motivo = ? WHERE motivo = ?",
+            "UPDATE saidas_estoque SET motivo = %s WHERE motivo = %s",
             (novo, antigo)
         )
     conn.commit()
@@ -226,9 +240,9 @@ def criar_edicao(nome):
     """Insere uma nova edição/cliente e retorna o id gerado."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO edicoes (nome) VALUES (?)", (nome,))
+    cursor.execute("INSERT INTO edicoes (nome) VALUES (%s) RETURNING id", (nome,))
+    novo_id = cursor.fetchone()['id']
     conn.commit()
-    novo_id = cursor.lastrowid
     conn.close()
     return novo_id
 
@@ -248,7 +262,7 @@ def registrar_producao(modelo_nome, cor_paralama, cor_chassis, edicao_id, quanti
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM produtos WHERE nome = ?", (modelo_nome,))
+    cursor.execute("SELECT id FROM produtos WHERE nome = %s", (modelo_nome,))
     produto = cursor.fetchone()
 
     if not produto:
@@ -258,12 +272,12 @@ def registrar_producao(modelo_nome, cor_paralama, cor_chassis, edicao_id, quanti
     if modelo_nome == 'TUI POP':
         cursor.execute("""
             SELECT id FROM variacoes
-            WHERE produto_id = ? AND cor_paralama = ? AND cor_chassis = ? AND edicao_id = ?
+            WHERE produto_id = %s AND cor_paralama = %s AND cor_chassis = %s AND edicao_id = %s
         """, (produto_id, cor_paralama, cor_chassis, edicao_id))
     else:
         cursor.execute("""
             SELECT id FROM variacoes
-            WHERE produto_id = ? AND cor_paralama = ? AND edicao_id = ?
+            WHERE produto_id = %s AND cor_paralama = %s AND edicao_id = %s
         """, (produto_id, cor_paralama, edicao_id))
 
     variacao = cursor.fetchone()
@@ -273,13 +287,13 @@ def registrar_producao(modelo_nome, cor_paralama, cor_chassis, edicao_id, quanti
 
     variacao_id = variacao["id"]
 
-    cursor.execute("INSERT INTO producao (variacao_id, quantidade) VALUES (?, ?)", (variacao_id, quantidade))
+    cursor.execute("INSERT INTO producao (variacao_id, quantidade) VALUES (%s, %s)", (variacao_id, quantidade))
 
     cursor.execute("""
         UPDATE variacoes
-        SET estoque_atual = estoque_atual + ?,
-            data_atualizacao = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')
-        WHERE id = ?
+        SET estoque_atual = estoque_atual + %s,
+            data_atualizacao = CURRENT_TIMESTAMP
+        WHERE id = %s
     """, (quantidade, variacao_id))
 
     # Reservado: lógica de capacete será implementada em versão futura.
@@ -292,28 +306,27 @@ def consultar_producao(periodo="diario"):
     conn = get_connection()
     cursor = conn.cursor()
 
-    base_query = """
-        SELECT p.id, v.nome_completo, p.quantidade, p.data_hora
+    base_query = f"""
+        SELECT p.id, v.nome_completo, p.quantidade,
+               to_char(p.data_hora, '{DATA_HORA_FMT}') AS data_hora
         FROM producao p
         JOIN variacoes v ON v.id = p.variacao_id
     """
 
+    params = ()
     if re.match(r'^\d{4}-\d{2}$', periodo):
-        query = f"""
-            {base_query}
-            WHERE strftime('%Y-%m', p.data_hora) = '{periodo}'
-            ORDER BY p.data_hora DESC
-        """
+        query = f"{base_query} WHERE to_char(p.data_hora, 'YYYY-MM') = %s ORDER BY p.data_hora DESC"
+        params = (periodo,)
     elif periodo == "diario":
-        query = f"{base_query} WHERE date(p.data_hora) = date('now', 'localtime') ORDER BY p.data_hora DESC"
+        query = f"{base_query} WHERE p.data_hora::date = CURRENT_DATE ORDER BY p.data_hora DESC"
     elif periodo == "semanal":
-        query = f"{base_query} WHERE date(p.data_hora) >= date('now', '-7 days', 'localtime') ORDER BY p.data_hora DESC"
+        query = f"{base_query} WHERE p.data_hora::date >= CURRENT_DATE - INTERVAL '7 days' ORDER BY p.data_hora DESC"
     elif periodo == "mensal":
-        query = f"{base_query} WHERE strftime('%Y-%m', p.data_hora) = strftime('%Y-%m', 'now', 'localtime') ORDER BY p.data_hora DESC"
+        query = f"{base_query} WHERE to_char(p.data_hora, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM') ORDER BY p.data_hora DESC"
     else:
-        query = f"{base_query} WHERE date(p.data_hora) = date('now', 'localtime') ORDER BY p.data_hora DESC"
+        query = f"{base_query} WHERE p.data_hora::date = CURRENT_DATE ORDER BY p.data_hora DESC"
 
-    producoes = cursor.execute(query).fetchall()
+    producoes = cursor.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in producoes]
 
@@ -325,14 +338,14 @@ def registrar_assistencia(nome_produto, quantidade):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM produtos WHERE nome = ?", (nome_produto,))
+    cursor.execute("SELECT id FROM produtos WHERE nome = %s", (nome_produto,))
     produto = cursor.fetchone()
     if not produto:
         conn.close()
         raise ValueError(f"Produto '{nome_produto}' não encontrado!")
 
     produto_id = produto["id"]
-    cursor.execute("INSERT INTO assistencia (produto_id, quantidade) VALUES (?, ?)", (produto_id, quantidade))
+    cursor.execute("INSERT INTO assistencia (produto_id, quantidade) VALUES (%s, %s)", (produto_id, quantidade))
 
     conn.commit()
     conn.close()
@@ -342,24 +355,27 @@ def consultar_assistencia(periodo="diario"):
     conn = get_connection()
     cursor = conn.cursor()
 
-    base_query = """
-        SELECT a.id, p.nome, a.quantidade, a.data_hora
+    base_query = f"""
+        SELECT a.id, p.nome, a.quantidade,
+               to_char(a.data_hora, '{DATA_HORA_FMT}') AS data_hora
         FROM assistencia a
         JOIN produtos p ON p.id = a.produto_id
     """
 
+    params = ()
     if re.match(r'^\d{4}-\d{2}$', periodo):
-        query = f"{base_query} WHERE strftime('%Y-%m', a.data_hora) = '{periodo}' ORDER BY a.data_hora DESC"
+        query = f"{base_query} WHERE to_char(a.data_hora, 'YYYY-MM') = %s ORDER BY a.data_hora DESC"
+        params = (periodo,)
     elif periodo == "diario":
-        query = f"{base_query} WHERE date(a.data_hora) = date('now', 'localtime') ORDER BY a.data_hora DESC"
+        query = f"{base_query} WHERE a.data_hora::date = CURRENT_DATE ORDER BY a.data_hora DESC"
     elif periodo == "semanal":
-        query = f"{base_query} WHERE date(a.data_hora) >= date('now', '-6 days', 'localtime') ORDER BY a.data_hora DESC"
+        query = f"{base_query} WHERE a.data_hora::date >= CURRENT_DATE - INTERVAL '6 days' ORDER BY a.data_hora DESC"
     elif periodo == "mensal":
-        query = f"{base_query} WHERE strftime('%Y-%m', a.data_hora) = strftime('%Y-%m', 'now', 'localtime') ORDER BY a.data_hora DESC"
+        query = f"{base_query} WHERE to_char(a.data_hora, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM') ORDER BY a.data_hora DESC"
     else:
-        query = f"{base_query} WHERE date(a.data_hora) = date('now', 'localtime') ORDER BY a.data_hora DESC"
+        query = f"{base_query} WHERE a.data_hora::date = CURRENT_DATE ORDER BY a.data_hora DESC"
 
-    embalagens = cursor.execute(query).fetchall()
+    embalagens = cursor.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in embalagens]
 
@@ -368,14 +384,14 @@ def deletar_producao(id_producao):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT variacao_id, quantidade FROM producao WHERE id = ?", (id_producao,))
+    cursor.execute("SELECT variacao_id, quantidade FROM producao WHERE id = %s", (id_producao,))
     registro = cursor.fetchone()
     if not registro:
         raise ValueError("Registro de produção não encontrado!")
 
-    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual - ? WHERE id = ?",
+    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual - %s WHERE id = %s",
                    (registro['quantidade'], registro['variacao_id']))
-    cursor.execute("DELETE FROM producao WHERE id = ?", (id_producao,))
+    cursor.execute("DELETE FROM producao WHERE id = %s", (id_producao,))
 
     conn.commit()
     conn.close()
@@ -384,7 +400,7 @@ def deletar_producao(id_producao):
 def deletar_assistencia(id_assistencia):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM assistencia WHERE id = ?", (id_assistencia,))
+    cursor.execute("DELETE FROM assistencia WHERE id = %s", (id_assistencia,))
     conn.commit()
     conn.close()
 
@@ -392,7 +408,7 @@ def deletar_assistencia(id_assistencia):
 def buscar_producao_por_id(id_producao):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, variacao_id, quantidade FROM producao WHERE id = ?", (id_producao,))
+    cursor.execute("SELECT id, variacao_id, quantidade FROM producao WHERE id = %s", (id_producao,))
     registro = cursor.fetchone()
     conn.close()
     return dict(registro) if registro else None
@@ -409,17 +425,17 @@ def atualizar_producao(id_producao, nova_quantidade, nova_data=None):
     quantidade_antiga = registro_antigo['quantidade']
     diferenca_estoque = nova_quantidade - quantidade_antiga
 
-    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual + ? WHERE id = ?",
+    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual + %s WHERE id = %s",
                    (diferenca_estoque, registro_antigo['variacao_id']))
 
     if nova_data:
         data_formatada = nova_data.replace('T', ' ')
         if len(data_formatada) == 16:
             data_formatada += ":00"
-        cursor.execute("UPDATE producao SET quantidade = ?, data_hora = ? WHERE id = ?",
+        cursor.execute("UPDATE producao SET quantidade = %s, data_hora = %s WHERE id = %s",
                        (nova_quantidade, data_formatada, id_producao))
     else:
-        cursor.execute("UPDATE producao SET quantidade = ? WHERE id = ?",
+        cursor.execute("UPDATE producao SET quantidade = %s WHERE id = %s",
                        (nova_quantidade, id_producao))
 
     conn.commit()
@@ -429,7 +445,7 @@ def atualizar_producao(id_producao, nova_quantidade, nova_data=None):
 def atualizar_assistencia(id_assistencia, nova_quantidade):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE assistencia SET quantidade = ? WHERE id = ?",
+    cursor.execute("UPDATE assistencia SET quantidade = %s WHERE id = %s",
                    (nova_quantidade, id_assistencia))
     conn.commit()
     conn.close()
@@ -442,8 +458,9 @@ def consultar_estoque():
     conn = get_connection()
     cursor = conn.cursor()
 
-    query = """
-        SELECT v.nome_completo, v.estoque_atual, v.data_atualizacao,
+    query = f"""
+        SELECT v.nome_completo, v.estoque_atual,
+               to_char(v.data_atualizacao, '{DATA_HORA_FMT}') AS data_atualizacao,
                v.edicao_id, COALESCE(e.nome, 'Padrão') as edicao_nome
         FROM variacoes v
         LEFT JOIN edicoes e ON e.id = v.edicao_id
@@ -480,7 +497,7 @@ def registrar_saida(nome_completo, quantidade, motivo, num_pedido='', observacao
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id, estoque_atual FROM variacoes WHERE nome_completo = ?", (nome_completo,))
+    cursor.execute("SELECT id, estoque_atual FROM variacoes WHERE nome_completo = %s", (nome_completo,))
     variacao = cursor.fetchone()
 
     if not variacao:
@@ -494,14 +511,14 @@ def registrar_saida(nome_completo, quantidade, motivo, num_pedido='', observacao
 
     novo_estoque = variacao['estoque_atual'] - quantidade
     cursor.execute(
-        "UPDATE variacoes SET estoque_atual = ?, "
-        "data_atualizacao = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') WHERE id = ?",
+        "UPDATE variacoes SET estoque_atual = %s, "
+        "data_atualizacao = CURRENT_TIMESTAMP WHERE id = %s",
         (novo_estoque, variacao['id'])
     )
 
     cursor.execute(
         "INSERT INTO saidas_estoque (variacao_id, quantidade, motivo, num_pedido, observacao) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "VALUES (%s, %s, %s, %s, %s)",
         (variacao['id'], quantidade, motivo, num_pedido, observacao)
     )
 
@@ -513,31 +530,40 @@ def consultar_saidas(periodo="diario", data_inicio=None, data_fim=None):
     conn = get_connection()
     cursor = conn.cursor()
 
-    base_query = """
-        SELECT s.id, v.nome_completo, s.quantidade, s.motivo, s.data_hora,
+    base_query = f"""
+        SELECT s.id, v.nome_completo, s.quantidade, s.motivo,
+               to_char(s.data_hora, '{DATA_HORA_FMT}') AS data_hora,
                COALESCE(s.num_pedido, '') as num_pedido
         FROM saidas_estoque s
         JOIN variacoes v ON v.id = s.variacao_id
     """
 
     if data_inicio and data_fim:
-        query = f"{base_query} WHERE date(s.data_hora) BETWEEN '{data_inicio}' AND '{data_fim}' ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date BETWEEN %s AND %s ORDER BY s.data_hora DESC"
+        params = (data_inicio, data_fim)
     elif data_inicio:
-        query = f"{base_query} WHERE date(s.data_hora) >= '{data_inicio}' ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date >= %s ORDER BY s.data_hora DESC"
+        params = (data_inicio,)
     elif data_fim:
-        query = f"{base_query} WHERE date(s.data_hora) <= '{data_fim}' ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date <= %s ORDER BY s.data_hora DESC"
+        params = (data_fim,)
     elif periodo == "diario":
-        query = f"{base_query} WHERE date(s.data_hora) = date('now', 'localtime') ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date = CURRENT_DATE ORDER BY s.data_hora DESC"
+        params = ()
     elif periodo == "semanal":
-        query = f"{base_query} WHERE date(s.data_hora) >= date('now', '-6 days', 'localtime') ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date >= CURRENT_DATE - INTERVAL '6 days' ORDER BY s.data_hora DESC"
+        params = ()
     elif periodo == "mensal":
-        query = f"{base_query} WHERE strftime('%Y-%m', s.data_hora) = strftime('%Y-%m', 'now', 'localtime') ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE to_char(s.data_hora, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM') ORDER BY s.data_hora DESC"
+        params = ()
     elif periodo == "ultimos_30_dias":
-        query = f"{base_query} WHERE date(s.data_hora) >= date('now', '-29 days', 'localtime') ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date >= CURRENT_DATE - INTERVAL '29 days' ORDER BY s.data_hora DESC"
+        params = ()
     else:
-        query = f"{base_query} WHERE date(s.data_hora) = date('now', 'localtime') ORDER BY s.data_hora DESC"
+        query = f"{base_query} WHERE s.data_hora::date = CURRENT_DATE ORDER BY s.data_hora DESC"
+        params = ()
 
-    saidas = cursor.execute(query).fetchall()
+    saidas = cursor.execute(query, params).fetchall()
     conn.close()
     return [dict(row) for row in saidas]
 
@@ -546,14 +572,14 @@ def deletar_saida(id_saida):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT variacao_id, quantidade FROM saidas_estoque WHERE id = ?", (id_saida,))
+    cursor.execute("SELECT variacao_id, quantidade FROM saidas_estoque WHERE id = %s", (id_saida,))
     registro = cursor.fetchone()
     if not registro:
         raise ValueError("Registro de saída não encontrado!")
 
-    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual + ? WHERE id = ?",
+    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual + %s WHERE id = %s",
                    (registro['quantidade'], registro['variacao_id']))
-    cursor.execute("DELETE FROM saidas_estoque WHERE id = ?", (id_saida,))
+    cursor.execute("DELETE FROM saidas_estoque WHERE id = %s", (id_saida,))
 
     conn.commit()
     conn.close()
@@ -563,7 +589,7 @@ def atualizar_saida(id_saida, nova_quantidade):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT variacao_id, quantidade FROM saidas_estoque WHERE id = ?", (id_saida,))
+    cursor.execute("SELECT variacao_id, quantidade FROM saidas_estoque WHERE id = %s", (id_saida,))
     registro_antigo = cursor.fetchone()
     if not registro_antigo:
         raise ValueError("Registro de saída não encontrado!")
@@ -571,7 +597,7 @@ def atualizar_saida(id_saida, nova_quantidade):
     quantidade_antiga = registro_antigo['quantidade']
     variacao_id = registro_antigo['variacao_id']
 
-    cursor.execute("SELECT estoque_atual FROM variacoes WHERE id = ?", (variacao_id,))
+    cursor.execute("SELECT estoque_atual FROM variacoes WHERE id = %s", (variacao_id,))
     estoque_atual = cursor.fetchone()['estoque_atual']
 
     if (estoque_atual + quantidade_antiga) < nova_quantidade:
@@ -581,9 +607,9 @@ def atualizar_saida(id_saida, nova_quantidade):
         )
 
     diferenca_estoque = nova_quantidade - quantidade_antiga
-    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual - ? WHERE id = ?",
+    cursor.execute("UPDATE variacoes SET estoque_atual = estoque_atual - %s WHERE id = %s",
                    (diferenca_estoque, variacao_id))
-    cursor.execute("UPDATE saidas_estoque SET quantidade = ? WHERE id = ?",
+    cursor.execute("UPDATE saidas_estoque SET quantidade = %s WHERE id = %s",
                    (nova_quantidade, id_saida))
 
     conn.commit()

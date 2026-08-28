@@ -5,6 +5,8 @@ CORES_PARALAMA = [
     'LARANJA', 'PRATA', 'PRETO', 'ROSA', 'ROXO', 'VERDE', 'VERMELHO',
 ]
 
+DATA_HORA_FMT = "YYYY-MM-DD HH24:MI:SS"
+
 
 # ──────────────────────────────────────────────
 # CRIAÇÃO DE TABELAS
@@ -14,26 +16,32 @@ def criar_tabelas_pecas():
     """
     Cria as 4 tabelas do módulo de peças.
     CREATE TABLE IF NOT EXISTS em todas — nunca dropa tabela existente.
+    Redundante com app/migrate_to_postgres.py, mantido para o app
+    subir sozinho em um Postgres vazio.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pecas (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            id               SERIAL PRIMARY KEY,
             codigo           TEXT UNIQUE NOT NULL,
             nome             TEXT NOT NULL,
             origem           TEXT NOT NULL,
             container_tipo   TEXT DEFAULT 'PADRAO',
             tem_variacao_cor INTEGER DEFAULT 0,
             peca_pai_id      INTEGER REFERENCES pecas(id),
-            ativo            INTEGER DEFAULT 1
+            ativo            INTEGER DEFAULT 1,
+            custo_unitario   REAL DEFAULT 0
         )
     """)
+    cursor.execute(
+        "ALTER TABLE pecas ADD COLUMN IF NOT EXISTS custo_unitario REAL DEFAULT 0"
+    )
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS estoque_pecas (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            id          SERIAL PRIMARY KEY,
             peca_id     INTEGER NOT NULL REFERENCES pecas(id),
             cor         TEXT DEFAULT NULL,
             quantidade  INTEGER NOT NULL DEFAULT 0,
@@ -42,8 +50,8 @@ def criar_tabelas_pecas():
     """)
 
     # Índice parcial para garantir idempotência do seed quando cor IS NULL.
-    # O UNIQUE(peca_id, cor) do SQLite não impede duas linhas com cor=NULL,
-    # pois NULL != NULL na verificação de unicidade. Este índice resolve.
+    # UNIQUE(peca_id, cor) não impede duas linhas com cor=NULL, pois
+    # NULL != NULL na verificação de unicidade (mesma semântica no Postgres).
     cursor.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_ep_peca_null_cor
         ON estoque_pecas(peca_id) WHERE cor IS NULL
@@ -51,7 +59,7 @@ def criar_tabelas_pecas():
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS movimentacoes_peca (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            id             SERIAL PRIMARY KEY,
             peca_id        INTEGER NOT NULL REFERENCES pecas(id),
             cor            TEXT DEFAULT NULL,
             tipo           TEXT NOT NULL,
@@ -60,13 +68,13 @@ def criar_tabelas_pecas():
             num_pedido     TEXT DEFAULT '',
             num_lote       TEXT DEFAULT '',
             modelo_scooter TEXT DEFAULT NULL,
-            data_hora      TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','localtime'))
+            data_hora      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS bom (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            id              SERIAL PRIMARY KEY,
             modelo          TEXT NOT NULL,
             peca_id         INTEGER NOT NULL REFERENCES pecas(id),
             usa_cor_scooter INTEGER DEFAULT 0,
@@ -75,11 +83,6 @@ def criar_tabelas_pecas():
             UNIQUE(modelo, peca_id)
         )
     """)
-
-    # Migração: adiciona custo_unitario se a tabela já existia sem a coluna
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(pecas)").fetchall()]
-    if 'custo_unitario' not in cols:
-        conn.execute("ALTER TABLE pecas ADD COLUMN custo_unitario REAL DEFAULT 0")
 
     conn.commit()
     conn.close()
@@ -91,7 +94,7 @@ def criar_tabelas_pecas():
 
 def carregar_pecas_iniciais():
     """
-    Insere todas as peças usando INSERT OR IGNORE (idempotente).
+    Insere todas as peças de forma idempotente (ON CONFLICT DO NOTHING).
     Inicializa estoque_pecas com quantidade 0.
     """
     conn = get_connection()
@@ -151,16 +154,17 @@ def carregar_pecas_iniciais():
 
     for codigo, nome, origem, container_tipo, tem_var in pecas_raiz:
         cursor.execute("""
-            INSERT OR IGNORE INTO pecas
+            INSERT INTO pecas
                 (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
-            VALUES (?, ?, ?, ?, ?, NULL)
+            VALUES (%s, %s, %s, %s, %s, NULL)
+            ON CONFLICT (codigo) DO NOTHING
         """, (codigo, nome, origem, container_tipo, tem_var))
 
     conn.commit()
 
     # ── Busca IDs dos kits pai ───────────────────────────────────────────────
     def _get_id(cod):
-        row = cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (cod,)).fetchone()
+        row = cursor.execute("SELECT id FROM pecas WHERE codigo = %s", (cod,)).fetchone()
         return row['id'] if row else None
 
     id_freio_tras = _get_id('FREIO-TRAS')
@@ -198,9 +202,10 @@ def carregar_pecas_iniciais():
 
     for codigo, nome, origem, container_tipo, tem_var, pai_id in componentes:
         cursor.execute("""
-            INSERT OR IGNORE INTO pecas
+            INSERT INTO pecas
                 (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (codigo) DO NOTHING
         """, (codigo, nome, origem, container_tipo, tem_var, pai_id))
 
     conn.commit()
@@ -212,15 +217,17 @@ def carregar_pecas_iniciais():
         if peca['codigo'] == 'PARALAMA':
             for cor in CORES_PARALAMA:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade)
-                    VALUES (?, ?, 0)
+                    INSERT INTO estoque_pecas (peca_id, cor, quantidade)
+                    VALUES (%s, %s, 0)
+                    ON CONFLICT (peca_id, cor) DO NOTHING
                 """, (peca['id'], cor))
         else:
-            # INSERT OR IGNORE funciona aqui graças ao índice parcial
-            # idx_ep_peca_null_cor criado em criar_tabelas_pecas()
+            # ON CONFLICT casa com o índice parcial idx_ep_peca_null_cor
+            # criado em criar_tabelas_pecas()
             cursor.execute("""
-                INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade)
-                VALUES (?, NULL, 0)
+                INSERT INTO estoque_pecas (peca_id, cor, quantidade)
+                VALUES (%s, NULL, 0)
+                ON CONFLICT (peca_id) WHERE cor IS NULL DO NOTHING
             """, (peca['id'],))
 
     conn.commit()
@@ -234,13 +241,13 @@ def carregar_pecas_iniciais():
 def carregar_bom_inicial():
     """
     Define quais peças compõem cada modelo de scooter.
-    INSERT OR IGNORE — idempotente.
+    ON CONFLICT DO NOTHING — idempotente.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
     def _get_peca_id(cod):
-        row = cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (cod,)).fetchone()
+        row = cursor.execute("SELECT id FROM pecas WHERE codigo = %s", (cod,)).fetchone()
         return row['id'] if row else None
 
     # ── BOM TUI MAIS ────────────────────────────────────────────────────────
@@ -281,9 +288,10 @@ def carregar_bom_inicial():
         peca_id = _get_peca_id(codigo)
         if peca_id:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI MAIS', ?, ?, ?, ?)
+                VALUES ('TUI MAIS', %s, %s, %s, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (peca_id, usa_cor, cor_fixa, qtd))
 
     # ── BOM TUI POP ─────────────────────────────────────────────────────────
@@ -322,9 +330,10 @@ def carregar_bom_inicial():
         peca_id = _get_peca_id(codigo)
         if peca_id:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI POP', ?, ?, ?, ?)
+                VALUES ('TUI POP', %s, %s, %s, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (peca_id, usa_cor, cor_fixa, qtd))
 
     conn.commit()
@@ -367,7 +376,7 @@ def listar_pecas(apenas_ativas=True, apenas_raiz=False):
 def buscar_peca_por_codigo(codigo):
     """Retorna dict da peça ou None."""
     conn = get_connection()
-    row = conn.execute("SELECT * FROM pecas WHERE codigo = ?", (codigo,)).fetchone()
+    row = conn.execute("SELECT * FROM pecas WHERE codigo = %s", (codigo,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -375,7 +384,7 @@ def buscar_peca_por_codigo(codigo):
 def buscar_peca_por_id(peca_id):
     """Retorna dict da peça ou None."""
     conn = get_connection()
-    row = conn.execute("SELECT * FROM pecas WHERE id = ?", (peca_id,)).fetchone()
+    row = conn.execute("SELECT * FROM pecas WHERE id = %s", (peca_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -395,7 +404,7 @@ def consultar_estoque_pecas(peca_id=None):
 
     if peca_id is not None:
         rows = conn.execute(
-            f"{base} WHERE ep.peca_id = ? ORDER BY ep.cor",
+            f"{base} WHERE ep.peca_id = %s ORDER BY ep.cor",
             (peca_id,)
         ).fetchall()
     else:
@@ -416,26 +425,29 @@ def adicionar_peca(codigo, nome, origem, container_tipo='PADRAO',
     conn = get_connection()
     cursor = conn.cursor()
 
-    if cursor.execute("SELECT id FROM pecas WHERE codigo = ?", (codigo,)).fetchone():
+    if cursor.execute("SELECT id FROM pecas WHERE codigo = %s", (codigo,)).fetchone():
         conn.close()
         raise ValueError(f"Código '{codigo}' já existe.")
 
     cursor.execute("""
         INSERT INTO pecas (codigo, nome, origem, container_tipo, tem_variacao_cor, peca_pai_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (codigo, nome, origem, container_tipo, int(tem_variacao_cor), peca_pai_id))
 
-    nova_id = cursor.lastrowid
+    nova_id = cursor.fetchone()['id']
 
     if tem_variacao_cor:
         for cor in CORES_PARALAMA:
             cursor.execute(
-                "INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade) VALUES (?, ?, 0)",
+                "INSERT INTO estoque_pecas (peca_id, cor, quantidade) VALUES (%s, %s, 0) "
+                "ON CONFLICT (peca_id, cor) DO NOTHING",
                 (nova_id, cor)
             )
     else:
         cursor.execute(
-            "INSERT OR IGNORE INTO estoque_pecas (peca_id, cor, quantidade) VALUES (?, NULL, 0)",
+            "INSERT INTO estoque_pecas (peca_id, cor, quantidade) VALUES (%s, NULL, 0) "
+            "ON CONFLICT (peca_id) WHERE cor IS NULL DO NOTHING",
             (nova_id,)
         )
 
@@ -455,19 +467,19 @@ def entrada_estoque_peca(peca_id, quantidade, cor=None,
 
     if cor:
         cursor.execute("""
-            UPDATE estoque_pecas SET quantidade = quantidade + ?
-            WHERE peca_id = ? AND cor = ?
+            UPDATE estoque_pecas SET quantidade = quantidade + %s
+            WHERE peca_id = %s AND cor = %s
         """, (quantidade, peca_id, cor))
     else:
         cursor.execute("""
-            UPDATE estoque_pecas SET quantidade = quantidade + ?
-            WHERE peca_id = ? AND cor IS NULL
+            UPDATE estoque_pecas SET quantidade = quantidade + %s
+            WHERE peca_id = %s AND cor IS NULL
         """, (quantidade, peca_id))
 
     cursor.execute("""
         INSERT INTO movimentacoes_peca
             (peca_id, cor, tipo, quantidade, motivo_detalhe, num_lote)
-        VALUES (?, ?, 'ENTRADA', ?, ?, ?)
+        VALUES (%s, %s, 'ENTRADA', %s, %s, %s)
     """, (peca_id, cor, quantidade, motivo_detalhe, num_lote))
 
     conn.commit()
@@ -488,11 +500,11 @@ def saida_manual_peca(peca_id, quantidade, tipo, cor=None,
 
     if cor:
         row = cursor.execute("""
-            SELECT quantidade FROM estoque_pecas WHERE peca_id = ? AND cor = ?
+            SELECT quantidade FROM estoque_pecas WHERE peca_id = %s AND cor = %s
         """, (peca_id, cor)).fetchone()
     else:
         row = cursor.execute("""
-            SELECT quantidade FROM estoque_pecas WHERE peca_id = ? AND cor IS NULL
+            SELECT quantidade FROM estoque_pecas WHERE peca_id = %s AND cor IS NULL
         """, (peca_id,)).fetchone()
 
     if not row:
@@ -508,19 +520,19 @@ def saida_manual_peca(peca_id, quantidade, tipo, cor=None,
 
     if cor:
         cursor.execute("""
-            UPDATE estoque_pecas SET quantidade = quantidade - ?
-            WHERE peca_id = ? AND cor = ?
+            UPDATE estoque_pecas SET quantidade = quantidade - %s
+            WHERE peca_id = %s AND cor = %s
         """, (quantidade, peca_id, cor))
     else:
         cursor.execute("""
-            UPDATE estoque_pecas SET quantidade = quantidade - ?
-            WHERE peca_id = ? AND cor IS NULL
+            UPDATE estoque_pecas SET quantidade = quantidade - %s
+            WHERE peca_id = %s AND cor IS NULL
         """, (quantidade, peca_id))
 
     cursor.execute("""
         INSERT INTO movimentacoes_peca
             (peca_id, cor, tipo, quantidade, motivo_detalhe, num_pedido, num_lote)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (peca_id, cor, tipo, quantidade, motivo_detalhe, num_pedido, num_lote))
 
     conn.commit()
@@ -539,7 +551,7 @@ def baixar_estoque_por_bom(modelo, cor_scooter, quantidade_scooters):
     bom_items = cursor.execute("""
         SELECT b.peca_id, b.usa_cor_scooter, b.cor_fixa, b.quantidade
         FROM bom b
-        WHERE b.modelo = ?
+        WHERE b.modelo = %s
     """, (modelo,)).fetchall()
 
     for item in bom_items:
@@ -555,19 +567,19 @@ def baixar_estoque_por_bom(modelo, cor_scooter, quantidade_scooters):
 
         if cor:
             cursor.execute("""
-                UPDATE estoque_pecas SET quantidade = quantidade - ?
-                WHERE peca_id = ? AND cor = ?
+                UPDATE estoque_pecas SET quantidade = quantidade - %s
+                WHERE peca_id = %s AND cor = %s
             """, (qtd_consumo, peca_id, cor))
         else:
             cursor.execute("""
-                UPDATE estoque_pecas SET quantidade = quantidade - ?
-                WHERE peca_id = ? AND cor IS NULL
+                UPDATE estoque_pecas SET quantidade = quantidade - %s
+                WHERE peca_id = %s AND cor IS NULL
             """, (qtd_consumo, peca_id))
 
         cursor.execute("""
             INSERT INTO movimentacoes_peca
                 (peca_id, cor, tipo, quantidade, modelo_scooter)
-            VALUES (?, ?, 'CONSUMO', ?, ?)
+            VALUES (%s, %s, 'CONSUMO', %s, %s)
         """, (peca_id, cor, qtd_consumo, modelo))
 
     conn.commit()
@@ -584,7 +596,7 @@ def existe_bom_para_modelo(modelo_nome):
     """
     conn = get_connection()
     row = conn.execute(
-        "SELECT 1 FROM bom WHERE modelo = ? LIMIT 1", (modelo_nome,)
+        "SELECT 1 FROM bom WHERE modelo = %s LIMIT 1", (modelo_nome,)
     ).fetchone()
     conn.close()
     return row is not None
@@ -606,16 +618,16 @@ def consultar_movimentacoes(peca_id=None, tipo=None,
     params = []
 
     if peca_id:
-        conditions.append("m.peca_id = ?")
+        conditions.append("m.peca_id = %s")
         params.append(peca_id)
     if tipo:
-        conditions.append("m.tipo = ?")
+        conditions.append("m.tipo = %s")
         params.append(tipo)
     if data_inicio:
-        conditions.append("date(m.data_hora) >= ?")
+        conditions.append("m.data_hora::date >= %s")
         params.append(data_inicio)
     if data_fim:
-        conditions.append("date(m.data_hora) <= ?")
+        conditions.append("m.data_hora::date <= %s")
         params.append(data_fim)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -623,7 +635,7 @@ def consultar_movimentacoes(peca_id=None, tipo=None,
     query = f"""
         SELECT m.id, m.peca_id, p.codigo, p.nome, m.cor, m.tipo,
                m.quantidade, m.motivo_detalhe, m.num_pedido, m.num_lote,
-               m.modelo_scooter, m.data_hora
+               m.modelo_scooter, to_char(m.data_hora, '{DATA_HORA_FMT}') AS data_hora
         FROM movimentacoes_peca m
         JOIN pecas p ON p.id = m.peca_id
         {where}
@@ -648,8 +660,8 @@ def consultar_pecas_criticas(minimo=20):
         FROM estoque_pecas ep
         JOIN pecas p ON p.id = ep.peca_id
         WHERE p.ativo = 1
-        GROUP BY ep.peca_id
-        HAVING SUM(ep.quantidade) < ?
+        GROUP BY ep.peca_id, p.codigo, p.nome, p.origem
+        HAVING SUM(ep.quantidade) < %s
         ORDER BY quantidade_total ASC
     """
 
@@ -669,16 +681,17 @@ def consultar_defeitos_para_relatorio(data_inicio=None, data_fim=None):
     params = []
 
     if data_inicio:
-        conditions.append("date(m.data_hora) >= ?")
+        conditions.append("m.data_hora::date >= %s")
         params.append(data_inicio)
     if data_fim:
-        conditions.append("date(m.data_hora) <= ?")
+        conditions.append("m.data_hora::date <= %s")
         params.append(data_fim)
 
     where = "WHERE " + " AND ".join(conditions)
 
     query = f"""
-        SELECT m.data_hora, p.codigo, p.nome, m.cor, m.quantidade,
+        SELECT to_char(m.data_hora, '{DATA_HORA_FMT}') AS data_hora,
+               p.codigo, p.nome, m.cor, m.quantidade,
                m.motivo_detalhe, m.num_lote
         FROM movimentacoes_peca m
         JOIN pecas p ON p.id = m.peca_id
@@ -699,7 +712,7 @@ def atualizar_custo_peca(peca_id, novo_custo):
     """Atualiza o custo unitário (USD) de uma peça pelo id."""
     conn = get_connection()
     conn.execute(
-        "UPDATE pecas SET custo_unitario = ? WHERE id = ?",
+        "UPDATE pecas SET custo_unitario = %s WHERE id = %s",
         (novo_custo, peca_id)
     )
     conn.commit()
@@ -753,11 +766,11 @@ def atualizar_custos_iniciais():
     nao_encontrados = []
     for codigo, custo in custos:
         row = cursor.execute(
-            "SELECT id FROM pecas WHERE codigo = ?", (codigo,)
+            "SELECT id FROM pecas WHERE codigo = %s", (codigo,)
         ).fetchone()
         if row:
             cursor.execute(
-                "UPDATE pecas SET custo_unitario = ? WHERE id = ?",
+                "UPDATE pecas SET custo_unitario = %s WHERE id = %s",
                 (custo, row['id'])
             )
         else:
@@ -779,14 +792,14 @@ def carregar_bom_modelos_novos():
     """
     1. Adiciona Farol traseiro + Alarme às BOMs base (TUI MAIS, TUI POP).
     2. Constrói BOMs de TUI MAIS-S, TUI POP-S e TUI MAIS-LS.
-    Totalmente idempotente via INSERT OR IGNORE (UNIQUE modelo+peca_id).
+    Totalmente idempotente via ON CONFLICT DO NOTHING (UNIQUE modelo+peca_id).
     """
     conn = get_connection()
     cursor = conn.cursor()
 
     def _id(cod):
         row = cursor.execute(
-            "SELECT id FROM pecas WHERE codigo = ?", (cod,)
+            "SELECT id FROM pecas WHERE codigo = %s", (cod,)
         ).fetchone()
         return row['id'] if row else None
 
@@ -810,9 +823,10 @@ def carregar_bom_modelos_novos():
         for peca_id in (id_farol, id_alarme):
             if peca_id:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO bom
+                    INSERT INTO bom
                         (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                    VALUES (?, ?, 0, NULL, 1)
+                    VALUES (%s, %s, 0, NULL, 1)
+                    ON CONFLICT (modelo, peca_id) DO NOTHING
                 """, (modelo, peca_id))
 
     # ── 5.2 BOM TUI MAIS-S ──────────────────────────────────────────────────
@@ -825,18 +839,20 @@ def carregar_bom_modelos_novos():
     ).fetchall():
         if item['peca_id'] not in excluir_mais_s:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI MAIS-S', ?, ?, ?, ?)
+                VALUES ('TUI MAIS-S', %s, %s, %s, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (item['peca_id'], item['usa_cor_scooter'],
                   item['cor_fixa'], item['quantidade']))
 
     for peca_id, qtd in [(id_garfo_s, 1), (id_quad_ms, 1), (id_amort, 4)]:
         if peca_id:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI MAIS-S', ?, 0, NULL, ?)
+                VALUES ('TUI MAIS-S', %s, 0, NULL, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (peca_id, qtd))
 
     # ── 5.3 BOM TUI POP-S ───────────────────────────────────────────────────
@@ -849,18 +865,20 @@ def carregar_bom_modelos_novos():
     ).fetchall():
         if item['peca_id'] not in excluir_pop_s:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI POP-S', ?, ?, ?, ?)
+                VALUES ('TUI POP-S', %s, %s, %s, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (item['peca_id'], item['usa_cor_scooter'],
                   item['cor_fixa'], item['quantidade']))
 
     for peca_id, qtd in [(id_garfo_s, 1), (id_quad_ps, 1), (id_amort, 4)]:
         if peca_id:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI POP-S', ?, 0, NULL, ?)
+                VALUES ('TUI POP-S', %s, 0, NULL, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (peca_id, qtd))
 
     # ── 5.4 BOM TUI MAIS-LS ─────────────────────────────────────────────────
@@ -875,18 +893,20 @@ def carregar_bom_modelos_novos():
         if item['peca_id'] == id_quad_ms:
             continue  # substituído por Quadro comprido LS
         cursor.execute("""
-            INSERT OR IGNORE INTO bom
+            INSERT INTO bom
                 (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-            VALUES ('TUI MAIS-LS', ?, ?, ?, ?)
+            VALUES ('TUI MAIS-LS', %s, %s, %s, %s)
+            ON CONFLICT (modelo, peca_id) DO NOTHING
         """, (item['peca_id'], item['usa_cor_scooter'],
               item['cor_fixa'], item['quantidade']))
 
     for peca_id, qtd in [(id_quad_ls, 1), (id_cabo_lng, 1)]:
         if peca_id:
             cursor.execute("""
-                INSERT OR IGNORE INTO bom
+                INSERT INTO bom
                     (modelo, peca_id, usa_cor_scooter, cor_fixa, quantidade)
-                VALUES ('TUI MAIS-LS', ?, 0, NULL, ?)
+                VALUES ('TUI MAIS-LS', %s, 0, NULL, %s)
+                ON CONFLICT (modelo, peca_id) DO NOTHING
             """, (peca_id, qtd))
 
     conn.commit()

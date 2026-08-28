@@ -1,6 +1,8 @@
 from .connection import get_connection
 from .peca import baixar_estoque_por_bom
 
+DATA_HORA_FMT = "YYYY-MM-DD HH24:MI:SS"
+
 
 # ──────────────────────────────────────────────
 # CRIAÇÃO DE TABELAS
@@ -10,43 +12,41 @@ def criar_tabelas_pedidos():
     """
     Cria pedidos e itens_pedido_scooter.
     CREATE TABLE IF NOT EXISTS — nunca dropa tabela existente.
+    Redundante com app/migrate_to_postgres.py, mantido para o app
+    subir sozinho em um Postgres vazio.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pedidos (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             num_pedido    TEXT NOT NULL,
             status        TEXT NOT NULL DEFAULT 'RESERVADO',
-            data_criacao  TIMESTAMP DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now','localtime')),
-            data_despacho TIMESTAMP DEFAULT NULL
+            data_criacao  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            data_despacho TIMESTAMP DEFAULT NULL,
+            prioridade    TEXT DEFAULT 'MEDIA',
+            transportadora TEXT DEFAULT NULL
         )
     """)
+    # prioridade: valores válidos 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE'
+    #   (sem CHECK no banco — validação fica na camada de aplicação/UI).
+    cursor.execute(
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prioridade TEXT DEFAULT 'MEDIA'"
+    )
+    cursor.execute(
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS transportadora TEXT DEFAULT NULL"
+    )
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS itens_pedido_scooter (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            id          SERIAL PRIMARY KEY,
             pedido_id   INTEGER NOT NULL REFERENCES pedidos(id),
             variacao_id INTEGER NOT NULL REFERENCES variacoes(id),
             producao_id INTEGER REFERENCES producao(id),
             quantidade  INTEGER NOT NULL
         )
     """)
-
-    # Migração idempotente (mesmo padrão de custo_unitario em peca.py):
-    # adiciona colunas só se ainda não existirem. Preparação p/ C3/C4.
-    # prioridade: valores válidos 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE'
-    #   (sem CHECK no banco — validação fica na camada de aplicação/UI).
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(pedidos)")]
-    if 'prioridade' not in cols:
-        conn.execute(
-            "ALTER TABLE pedidos ADD COLUMN prioridade TEXT DEFAULT 'MEDIA'"
-        )
-    if 'transportadora' not in cols:
-        conn.execute(
-            "ALTER TABLE pedidos ADD COLUMN transportadora TEXT DEFAULT NULL"
-        )
 
     conn.commit()
     conn.close()
@@ -61,12 +61,12 @@ def atualizar_prioridade_transportadora(pedido_id, prioridade=None,
     conn = get_connection()
     if prioridade is not None:
         conn.execute(
-            "UPDATE pedidos SET prioridade = ? WHERE id = ?",
+            "UPDATE pedidos SET prioridade = %s WHERE id = %s",
             (prioridade, pedido_id)
         )
     if transportadora is not None:
         conn.execute(
-            "UPDATE pedidos SET transportadora = ? WHERE id = ?",
+            "UPDATE pedidos SET transportadora = %s WHERE id = %s",
             (transportadora, pedido_id)
         )
     conn.commit()
@@ -93,7 +93,7 @@ def _resolver_variacao_id(cursor, modelo_nome, cor_paralama, cor_chassis):
     ambiguidade caso edições adicionais passem a existir.
     """
     produto = cursor.execute(
-        "SELECT id FROM produtos WHERE nome = ?", (modelo_nome,)
+        "SELECT id FROM produtos WHERE nome = %s", (modelo_nome,)
     ).fetchone()
     if not produto:
         raise ValueError(f"Modelo de produto '{modelo_nome}' não encontrado!")
@@ -102,12 +102,12 @@ def _resolver_variacao_id(cursor, modelo_nome, cor_paralama, cor_chassis):
     if modelo_nome == 'TUI POP':
         variacao = cursor.execute("""
             SELECT id FROM variacoes
-            WHERE produto_id = ? AND cor_paralama = ? AND cor_chassis = ? AND edicao_id = 1
+            WHERE produto_id = %s AND cor_paralama = %s AND cor_chassis = %s AND edicao_id = 1
         """, (produto_id, cor_paralama, cor_chassis)).fetchone()
     else:
         variacao = cursor.execute("""
             SELECT id FROM variacoes
-            WHERE produto_id = ? AND cor_paralama = ? AND edicao_id = 1
+            WHERE produto_id = %s AND cor_paralama = %s AND edicao_id = 1
         """, (produto_id, cor_paralama)).fetchone()
 
     if not variacao:
@@ -122,7 +122,7 @@ def _tem_bom(cursor, modelo_nome):
     modelo (query em `bom`, não lista fixa). Retorna bool.
     """
     row = cursor.execute(
-        "SELECT 1 FROM bom WHERE modelo = ? LIMIT 1", (modelo_nome,)
+        "SELECT 1 FROM bom WHERE modelo = %s LIMIT 1", (modelo_nome,)
     ).fetchone()
     return row is not None
 
@@ -133,7 +133,7 @@ def _itens_do_pedido(conn, pedido_id):
         SELECT i.id AS item_id, v.nome_completo, i.quantidade
         FROM itens_pedido_scooter i
         JOIN variacoes v ON v.id = i.variacao_id
-        WHERE i.pedido_id = ?
+        WHERE i.pedido_id = %s
         ORDER BY i.id
     """, (pedido_id,)).fetchall()
     return [dict(row) for row in itens]
@@ -173,8 +173,9 @@ def listar_pedidos_reservados():
     Ordenado por data_criacao DESC.
     """
     conn = get_connection()
-    pedidos = conn.execute("""
-        SELECT id, num_pedido, data_criacao, prioridade, transportadora
+    pedidos = conn.execute(f"""
+        SELECT id, num_pedido, to_char(data_criacao, '{DATA_HORA_FMT}') AS data_criacao,
+               prioridade, transportadora
         FROM pedidos
         WHERE status = 'RESERVADO'
         ORDER BY data_criacao DESC
@@ -203,10 +204,11 @@ def buscar_pedido_por_numero(num_pedido):
     Retorna lista vazia se não encontrar.
     """
     conn = get_connection()
-    pedidos = conn.execute("""
-        SELECT id, num_pedido, data_criacao, prioridade, transportadora
+    pedidos = conn.execute(f"""
+        SELECT id, num_pedido, to_char(data_criacao, '{DATA_HORA_FMT}') AS data_criacao,
+               prioridade, transportadora
         FROM pedidos
-        WHERE num_pedido = ? AND status = 'RESERVADO'
+        WHERE num_pedido = %s AND status = 'RESERVADO'
         ORDER BY data_criacao DESC
     """, (num_pedido,)).fetchall()
 
@@ -256,17 +258,17 @@ def registrar_producao_pedido(modelo_nome, cor_paralama, cor_chassis,
                                          cor_paralama, cor_chassis)
 
     cursor.execute(
-        "INSERT INTO producao (variacao_id, quantidade) VALUES (?, ?)",
+        "INSERT INTO producao (variacao_id, quantidade) VALUES (%s, %s) RETURNING id",
         (variacao_id, quantidade)
     )
-    producao_id = cursor.lastrowid
+    producao_id = cursor.fetchone()['id']
 
     # NÃO faz UPDATE em variacoes.estoque_atual — diferença
     # crucial vs registrar_producao() normal. A scooter reservada
     # não conta no estoque geral livre até ser cancelada.
 
     pedido_row = cursor.execute(
-        "SELECT id FROM pedidos WHERE num_pedido = ? AND status = 'RESERVADO'",
+        "SELECT id FROM pedidos WHERE num_pedido = %s AND status = 'RESERVADO'",
         (num_pedido,)
     ).fetchone()
 
@@ -274,17 +276,18 @@ def registrar_producao_pedido(modelo_nome, cor_paralama, cor_chassis,
         pedido_id = pedido_row['id']
     else:
         cursor.execute(
-            "INSERT INTO pedidos (num_pedido, status) VALUES (?, 'RESERVADO')",
+            "INSERT INTO pedidos (num_pedido, status) VALUES (%s, 'RESERVADO') RETURNING id",
             (num_pedido,)
         )
-        pedido_id = cursor.lastrowid
+        pedido_id = cursor.fetchone()['id']
 
     cursor.execute("""
         INSERT INTO itens_pedido_scooter
             (pedido_id, variacao_id, producao_id, quantidade)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
     """, (pedido_id, variacao_id, producao_id, quantidade))
-    item_id = cursor.lastrowid
+    item_id = cursor.fetchone()['id']
 
     conn.commit()
 
@@ -320,7 +323,7 @@ def confirmar_despacho(pedido_id, motivo):
     cursor = conn.cursor()
 
     pedido = cursor.execute(
-        "SELECT id, num_pedido, status FROM pedidos WHERE id = ?",
+        "SELECT id, num_pedido, status FROM pedidos WHERE id = %s",
         (pedido_id,)
     ).fetchone()
     if not pedido:
@@ -336,21 +339,21 @@ def confirmar_despacho(pedido_id, motivo):
     num_pedido = pedido['num_pedido']
 
     itens = cursor.execute(
-        "SELECT variacao_id, quantidade FROM itens_pedido_scooter WHERE pedido_id = ?",
+        "SELECT variacao_id, quantidade FROM itens_pedido_scooter WHERE pedido_id = %s",
         (pedido_id,)
     ).fetchall()
 
     for item in itens:
         cursor.execute("""
             INSERT INTO saidas_estoque (variacao_id, quantidade, motivo, num_pedido)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         """, (item['variacao_id'], item['quantidade'], motivo, num_pedido))
 
     cursor.execute("""
         UPDATE pedidos
         SET status = 'DESPACHADO',
-            data_despacho = strftime('%Y-%m-%d %H:%M:%S','now','localtime')
-        WHERE id = ?
+            data_despacho = CURRENT_TIMESTAMP
+        WHERE id = %s
     """, (pedido_id,))
 
     conn.commit()
@@ -378,7 +381,7 @@ def cancelar_pedido(pedido_id):
     cursor = conn.cursor()
 
     pedido = cursor.execute(
-        "SELECT id, num_pedido, status FROM pedidos WHERE id = ?",
+        "SELECT id, num_pedido, status FROM pedidos WHERE id = %s",
         (pedido_id,)
     ).fetchone()
     if not pedido:
@@ -392,19 +395,19 @@ def cancelar_pedido(pedido_id):
         )
 
     itens = cursor.execute(
-        "SELECT variacao_id, quantidade FROM itens_pedido_scooter WHERE pedido_id = ?",
+        "SELECT variacao_id, quantidade FROM itens_pedido_scooter WHERE pedido_id = %s",
         (pedido_id,)
     ).fetchall()
 
     for item in itens:
         cursor.execute("""
             UPDATE variacoes
-            SET estoque_atual = estoque_atual + ?
-            WHERE id = ?
+            SET estoque_atual = estoque_atual + %s
+            WHERE id = %s
         """, (item['quantidade'], item['variacao_id']))
 
     cursor.execute(
-        "UPDATE pedidos SET status = 'CANCELADO' WHERE id = ?",
+        "UPDATE pedidos SET status = 'CANCELADO' WHERE id = %s",
         (pedido_id,)
     )
 
@@ -440,7 +443,7 @@ def editar_item_pedido(item_id, nova_quantidade):
         SELECT i.id, i.quantidade, i.producao_id, i.pedido_id, p.status, p.num_pedido
         FROM itens_pedido_scooter i
         JOIN pedidos p ON p.id = i.pedido_id
-        WHERE i.id = ?
+        WHERE i.id = %s
     """, (item_id,)).fetchone()
 
     if not item:
@@ -460,13 +463,13 @@ def editar_item_pedido(item_id, nova_quantidade):
     _diferenca = nova_quantidade - item['quantidade']
 
     cursor.execute(
-        "UPDATE itens_pedido_scooter SET quantidade = ? WHERE id = ?",
+        "UPDATE itens_pedido_scooter SET quantidade = %s WHERE id = %s",
         (nova_quantidade, item_id)
     )
 
     if item['producao_id'] is not None:
         cursor.execute(
-            "UPDATE producao SET quantidade = ? WHERE id = ?",
+            "UPDATE producao SET quantidade = %s WHERE id = %s",
             (nova_quantidade, item['producao_id'])
         )
 
