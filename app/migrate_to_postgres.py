@@ -152,15 +152,52 @@ def get_sqlite_connection():
     return conn
 
 
+METAS_DDL = """
+CREATE TABLE IF NOT EXISTS metas_setores (
+    id     VARCHAR(50) PRIMARY KEY,
+    nome   VARCHAR(100) NOT NULL,
+    ordem  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS metas_config (
+    id          SERIAL PRIMARY KEY,
+    setor       VARCHAR(50) NOT NULL UNIQUE REFERENCES metas_setores(id),
+    meta_diaria INTEGER NOT NULL DEFAULT 0,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO metas_setores (id, nome, ordem) VALUES
+    ('fabricacao',  'Fabricação',  1),
+    ('chassis',     'Chassis',     2),
+    ('paralamas',   'Paralamas',   3),
+    ('montagem',    'Montagem',    4),
+    ('eletrica',    'Elétrica',    5),
+    ('embalagem',   'Embalagem',   6)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO metas_config (setor, meta_diaria)
+    SELECT id, 0 FROM metas_setores
+ON CONFLICT (setor) DO NOTHING;
+"""
+
+
 def criar_tabelas_postgres():
     print("== Criando tabelas no PostgreSQL ==")
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(DDL)
-    conn.commit()
-    conn.close()
     for tabela in TABELAS_EM_ORDEM:
         print(f"  ok: {tabela}")
+
+    # Tabelas da Fase 1 (Tela de Metas) — não fazem parte da migração de
+    # dados do SQLite (não existiam lá), por isso ficam fora de
+    # TABELAS_EM_ORDEM: nunca são TRUNCATE'd por migrar_dados_sqlite_para_postgres().
+    cursor.execute(METAS_DDL)
+    print("  ok: metas_setores")
+    print("  ok: metas_config")
+
+    conn.commit()
+    conn.close()
 
 
 def migrar_dados_sqlite_para_postgres():
