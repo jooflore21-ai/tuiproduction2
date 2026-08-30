@@ -834,3 +834,63 @@ Dados de teste: C3-URGENTE (RESERVADO/JadLog), C3-ALTA (editado
 - [x] C1, Addendum, C2, Fix BOM, C3
 - [x] Bloco C — Fase C4 (saída: bloco de despacho) — concluído 17/08/2026
 - [ ] Bloco C — Fase C5 (peças no mesmo pedido)
+
+---
+
+## Fase 1 — Tela de Metas · Concluído (28/08/2026)
+
+Painel fullscreen dark para exibição na fábrica (`/metas`), com metas
+diárias/semanais/mensais da Embalagem (dado real, tabela `producao`) e
+6 setores (5 zerados até o MES ser ativado). Admin edita metas em
+`/metas/admin`, protegido por PIN.
+
+### Decisão de arquitetura — autenticação (não existia no projeto)
+Não havia nenhum sistema de PIN/login/sessão antes desta fase — o
+projeto sempre operou "sem autenticação" por design (rede interna).
+Como o spec original pedia proteção por "session PIN" sem esse
+mecanismo existir, parei e perguntei ao usuário antes de inventar
+arquitetura. Decisão confirmada: PIN único compartilhado via
+`ADMIN_PIN` no `.env`, sessão Flask de 12h (`session['admin_autenticado']`),
+`/admin/login` + decorator `admin_required` em `app/auth.py`. Não é
+sistema de usuários/papéis — mudança maior fica para o futuro, se
+virar necessidade real (mesma ressalva já registrada na seção
+"Prioridade manual de pedido" acima).
+
+**Achado de segurança corrigido junto:** `SECRET_KEY` do Flask estava
+hardcoded (`'estoque-tui'`) em `app/__init__.py`. Como ela agora assina
+o cookie que guarda `admin_autenticado`, deixá-la fixa no código
+tornaria o PIN inteiro contornável (forjar cookie sem saber o PIN).
+Movida para `FLASK_SECRET_KEY` no `.env` (gerada aleatória, gitignored).
+
+### Schema novo
+`metas_setores` (6 setores fixos) + `metas_config` (meta_diaria por
+setor, FK para metas_setores). Criadas em `migrate_to_postgres.py::criar_tabelas_postgres()`,
+fora da lista `TABELAS_EM_ORDEM` — não são fonte-SQLite, não são
+TRUNCATE'd em migrações futuras (dado de config real, não de teste).
+
+### Decisões de cálculo registradas
+- `calcular_dias_uteis_semana_atual`: conta seg–sex da semana corrente,
+  mas só os dias que caem dentro do mês informado (semana que cruza
+  virada de mês não conta dias do mês vizinho). Sem feriados, como pedido.
+- `faltam` não é clampado em 0 — pode ficar negativo se produção
+  superar a meta; front-end decide "META ATINGIDA" via `faltam <= 0`.
+- `percentual` adicionado aos blocos `geral` (só existia no exemplo de
+  `setores`) — necessário pro anel SVG dos 3 cards superiores.
+- Anel SVG: JS é a única fonte da renderização (`renderAnel`), chamado
+  tanto no load inicial (via `dados | tojson` embutido) quanto no
+  auto-refresh — evita duplicar a matemática do anel em Jinja e JS.
+- `base.html` ganhou `{% block page_header %}` (antes incondicional)
+  pra permitir telas fullscreen (Metas, login admin) sem o header
+  padrão — zero mudança visual nas páginas existentes.
+
+### Validado com dados reais (28/08/2026)
+Produção de teste (6× TUI MAIS BRANCO) + meta de teste (Embalagem=10,
+depois=5) usadas para confirmar matemática ao vivo (60%/12%/3% e
+depois 120%/"META ATINGIDA"), anel SVG com stroke-dashoffset correto,
+auto-refresh, POST /metas/config bloqueado sem sessão (confirmado que
+a tentativa não escreveu no banco). **Revertido**: produção de teste
+excluída, meta de Embalagem resetada para 0 — banco fica limpo pro
+usuário configurar as metas reais.
+
+### Status da fila
+- [x] Fase 1 — Tela de Metas (28/08/2026)

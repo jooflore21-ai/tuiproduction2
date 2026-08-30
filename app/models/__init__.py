@@ -42,3 +42,13 @@ from .pedido import (
     editar_item_pedido,
     atualizar_prioridade_transportadora,
 )
+from .metas import (
+    obter_metas_config,
+    atualizar_meta_diaria,
+    calcular_dias_uteis_mes,
+    calcular_dias_uteis_semana_atual,
+    obter_producao_embalagem_hoje,
+    obter_producao_embalagem_semana,
+    obter_producao_embalagem_mes,
+    montar_dados_painel,
+)

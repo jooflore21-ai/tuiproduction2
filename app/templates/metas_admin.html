@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Configuração de Metas — TUI{% endblock %}
+{% block current_page %}metas-admin{% endblock %}
+{% block header_title %}Configuração de Metas{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}{% endif %}
+    {% endwith %}
+
+    <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:16px;">
+        Meta diária por setor. Semanal e mensal são calculadas automaticamente
+        (dias úteis do mês corrente: {{ dados.dias_uteis_mes }} · da semana: {{ dados.dias_uteis_semana }}).
+    </p>
+
+    <div style="background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-md); overflow:hidden; border:1px solid var(--border);"
+         data-block="metas-admin-tabela">
+        <table>
+            <thead>
+                <tr>
+                    <th>Setor</th>
+                    <th style="text-align:right;">Meta Diária</th>
+                    <th style="text-align:right;">Meta Semanal*</th>
+                    <th style="text-align:right;">Meta Mensal*</th>
+                    <th style="text-align:center; width:100px;">Editar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in metas %}
+                <tr>
+                    <td>{{ m.nome }}</td>
+                    <td style="text-align:right; font-weight:600;">{{ m.meta_diaria }}</td>
+                    <td style="text-align:right; color:var(--text-muted);">{{ m.meta_diaria * dados.dias_uteis_semana }}</td>
+                    <td style="text-align:right; color:var(--text-muted);">{{ m.meta_diaria * dados.dias_uteis_mes }}</td>
+                    <td style="text-align:center;">
+                        <button type="button" class="btn-sm" onclick="toggleForm('{{ m.id }}')">Editar</button>
+                    </td>
+                </tr>
+                <tr id="row-form-{{ m.id }}" style="display:none;">
+                    <td colspan="5" style="background:var(--surface);">
+                        <form method="POST" action="{{ url_for('metas.config_metas') }}"
+                              data-block="metas-admin-form-{{ m.id }}"
+                              style="display:flex; align-items:center; gap:10px; padding:10px 4px; flex-wrap:wrap;">
+                            <input type="hidden" name="setor" value="{{ m.id }}">
+                            <label for="meta-{{ m.id }}" style="font-size:0.85rem; font-weight:600;">Nova meta diária:</label>
+                            <input type="number" name="meta_diaria" id="meta-{{ m.id }}" min="0"
+                                   value="{{ m.meta_diaria }}" required
+                                   class="form-select" style="width:110px;">
+                            <button type="submit" class="btn-submit" style="margin:0; padding:8px 16px; font-size:0.85rem;">Salvar</button>
+                            <button type="button" class="btn-sm" onclick="toggleForm('{{ m.id }}')">Cancelar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; color:var(--text-muted); padding:32px;">
+                        Nenhum setor cadastrado.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p style="padding:12px 20px; font-size:0.78rem; color:var(--text-muted); margin:0; border-top:1px solid var(--border);">
+            * Meta Semanal e Mensal são calculadas (Meta Diária × dias úteis) — não editáveis diretamente.
+        </p>
+    </div>
+
+    <div style="margin-top:20px;">
+        <a href="{{ url_for('metas.painel_metas') }}" class="btn" style="font-size:0.85rem; padding:8px 14px; text-decoration:none;">
+            Ver Painel de Metas
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleForm(setorId) {
+    const row = document.getElementById('row-form-' + setorId);
+    if (!row) return;
+    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}

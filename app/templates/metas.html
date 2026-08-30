@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Metas — TUI{% endblock %}
+{% block current_page %}metas{% endblock %}
+{% block page_header %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/metas.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set icones = {
+    'fabricacao': '🏭', 'chassis': '⚙️', 'paralamas': '🎨',
+    'montagem': '🔧', 'eletrica': '⚡', 'embalagem': '📦',
+} %}
+
+{% macro card_meta(block_id, goal_key, titulo, badge, meta, produzido, faltam, percentual, footer_label, icone='') %}
+{% set pct_clamp = [percentual, 100] | min %}
+<article class="goal-card" data-block="{{ block_id }}" data-goal-key="{{ goal_key }}"
+         data-progress="{{ pct_clamp }}" data-footer-label="{{ footer_label }}">
+    <header class="goal-header">
+        <span class="goal-titulo">{% if icone %}{{ icone }} {% endif %}{{ titulo }}</span>
+        {% if badge %}<span class="goal-badge">{{ badge }}</span>{% endif %}
+    </header>
+    <div class="goal-body">
+        <div class="goal-info">
+            <div class="goal-meta">META <span class="metas-num-laranja">{{ meta }}</span></div>
+            <div class="goal-numero">
+                <span class="metas-produzido-num">{{ produzido }}</span>
+                <span class="metas-produzidas-label">PRODUZIDAS</span>
+            </div>
+        </div>
+        <div class="progress-ring{% if percentual >= 100 %} atingida{% endif %}" style="--progress: {{ pct_clamp }};">
+            <span class="ring-pct">{{ percentual }}%</span>
+        </div>
+    </div>
+    <footer class="goal-footer">
+        {% if faltam <= 0 %}
+            <span class="metas-atingida">&#10003; META ATINGIDA</span>
+        {% else %}
+            FALTAM <span class="metas-num-laranja">{{ faltam }}</span> PARA {{ footer_label }}
+        {% endif %}
+    </footer>
+</article>
+{% endmacro %}
+
+<div class="metas-page">
+    <header class="metas-header" data-block="metas-header">
+        <div class="metas-header-left">
+            <div class="metas-logo">TUI</div>
+            <div>
+                <div class="metas-label-laranja">PRODUÇÃO EM TEMPO REAL</div>
+                <h1 class="metas-titulo">METAS <span class="metas-verde">DA EXPEDIÇÃO</span></h1>
+                <div class="metas-subtitulo">{{ dados.mes_ano }} · {{ dados.dias_uteis_mes }} dias úteis</div>
+            </div>
+        </div>
+        <div class="metas-header-right">
+            <button type="button" id="btn-ativar-som" class="metas-btn-som">⏰ Ativar som</button>
+            <div class="metas-relogio-wrap">
+                <div id="metas-relogio" class="metas-relogio">--:--:--</div>
+                <div class="metas-data-atual">{{ dados.data_hora_atual }}</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="metas-label-laranja">DESEMPENHO DIÁRIO</div>
+    <h2 class="metas-secao-titulo">METAS <span class="metas-verde">DA EXPEDIÇÃO E SETORES</span></h2>
+
+    <div class="metas-grid-3x3" data-block="metas-grid">
+        {{ card_meta('metas-card-diaria', 'diaria', 'Diária', 'Hoje',
+                     dados.geral.diaria.meta, dados.geral.diaria.produzido,
+                     dados.geral.diaria.faltam, dados.geral.diaria.percentual,
+                     'BATER A META') }}
+        {{ card_meta('metas-card-semanal', 'semanal', 'Semanal', dados.dias_uteis_semana ~ ' dias úteis',
+                     dados.geral.semanal.meta, dados.geral.semanal.produzido,
+                     dados.geral.semanal.faltam, dados.geral.semanal.percentual,
+                     'BATER A META') }}
+        {{ card_meta('metas-card-mensal', 'mensal', 'Mensal', dados.dias_uteis_mes ~ ' dias úteis',
+                     dados.geral.mensal.meta, dados.geral.mensal.produzido,
+                     dados.geral.mensal.faltam, dados.geral.mensal.percentual,
+                     'BATER A META') }}
+        {% for s in dados.setores %}
+            {{ card_meta('metas-card-' ~ s.id, s.id, s.nome, '',
+                         s.meta_diaria, s.produzido_hoje, s.faltam, s.percentual,
+                         'A META', icones.get(s.id, '')) }}
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.DADOS_INICIAIS = {{ dados | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/metas.js') }}"></script>
+{% endblock %}

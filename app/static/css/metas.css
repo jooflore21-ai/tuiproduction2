@@ -1,0 +1,253 @@
+html:has(.metas-page) { height: 100%; }
+
+.metas-page {
+    --metas-bg:        #0d0d0d;
+    --metas-card:      #171717;
+    --metas-border:    #2a2a2a;
+    --metas-text:      #ffffff;
+    --metas-text-dim:  #8a8a8a;
+    --metas-orange:    #ff8a00;
+    --metas-green:     #22c55e;
+
+    background: var(--metas-bg);
+    color: var(--metas-text);
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 22px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-transform: uppercase;
+    font-weight: 700;
+    box-sizing: border-box;
+}
+
+.metas-page * { box-sizing: border-box; }
+
+/* ── Header ─────────────────────────────────────── */
+.metas-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: clamp(10px, 1.4vh, 18px);
+    margin-bottom: clamp(10px, 1.4vh, 18px);
+    border-bottom: 1px solid var(--metas-border);
+    flex-shrink: 0;
+}
+
+.metas-header-left { display: flex; align-items: center; gap: 12px; }
+
+.metas-logo {
+    background: var(--metas-orange);
+    color: #0d0d0d;
+    font-size: 1.05rem;
+    font-weight: 900;
+    padding: 6px 10px;
+    border-radius: 7px;
+    letter-spacing: .05em;
+}
+
+.metas-label-laranja {
+    color: var(--metas-orange);
+    font-size: 0.65rem;
+    letter-spacing: .1em;
+    margin-bottom: 2px;
+}
+
+.metas-titulo {
+    font-size: 1.2rem;
+    margin: 0;
+    letter-spacing: .02em;
+    color: #fff;
+    line-height: 1.1;
+}
+
+.metas-verde { color: var(--metas-green); }
+
+.metas-subtitulo {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--metas-text-dim);
+    text-transform: none;
+    margin-top: 2px;
+}
+
+.metas-header-right { display: flex; align-items: center; gap: 16px; }
+
+.metas-btn-som {
+    background: var(--metas-card);
+    border: 1.5px solid var(--metas-border);
+    color: var(--metas-text-dim);
+    padding: 6px 12px;
+    border-radius: 7px;
+    font-weight: 700;
+    font-size: 0.68rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: border-color .15s, color .15s;
+}
+.metas-btn-som.ativo {
+    border-color: var(--metas-green);
+    color: var(--metas-green);
+}
+
+.metas-relogio-wrap { text-align: right; }
+.metas-relogio {
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    letter-spacing: .05em;
+    line-height: 1.1;
+}
+.metas-data-atual {
+    font-size: 0.68rem;
+    color: var(--metas-green);
+    text-transform: none;
+    margin-top: 1px;
+}
+
+/* ── Seções ─────────────────────────────────────── */
+.metas-label-laranja { flex-shrink: 0; }
+
+.metas-secao-titulo {
+    font-size: clamp(0.88rem, 1.7vh, 1.3rem);
+    margin: 0 0 clamp(8px, 1vh, 14px);
+    color: #fff;
+    letter-spacing: .02em;
+    flex-shrink: 0;
+}
+
+/* 3 colunas x 3 linhas: diária/semanal/mensal na 1ª linha,
+   6 setores nas linhas 2-3, cada célula com fração igual da altura
+   restante — não depende de tuning de tamanho pra caber sem scroll. */
+.metas-grid-3x3 {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: clamp(10px, 1.5vh, 20px);
+}
+
+@media (max-width: 900px) {
+    .metas-grid-3x3 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(5, 1fr); }
+}
+@media (max-width: 600px) {
+    .metas-grid-3x3 { grid-template-columns: 1fr; grid-template-rows: repeat(9, auto); overflow-y: auto; }
+}
+
+/* ── Cards ──────────────────────────────────────── */
+.goal-card {
+    background: var(--metas-card);
+    border: 1px solid var(--metas-border);
+    border-radius: 10px;
+    padding: clamp(8px, 1.3vh, 16px) clamp(12px, 1.6vh, 20px);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: clamp(4px, 0.6vh, 8px);
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.goal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.goal-titulo {
+    font-size: clamp(0.72rem, 1.3vh, 1rem);
+    color: #fff;
+    letter-spacing: .03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.goal-badge {
+    font-size: clamp(0.56rem, 1vh, 0.75rem);
+    font-weight: 700;
+    color: var(--metas-text-dim);
+    background: #222;
+    padding: 2px 7px;
+    border-radius: 99px;
+    text-transform: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.goal-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.goal-info { min-width: 0; }
+
+.goal-meta {
+    font-size: clamp(0.62rem, 1.1vh, 0.85rem);
+    color: var(--metas-text-dim);
+    letter-spacing: .04em;
+}
+.metas-num-laranja { color: var(--metas-orange); }
+
+.goal-numero { margin-top: 2px; }
+.metas-produzido-num {
+    display: block;
+    font-size: clamp(2.5rem, 6.6vh, 5rem);
+    color: var(--metas-orange);
+    line-height: 1;
+}
+.metas-produzidas-label {
+    display: block;
+    font-size: clamp(0.56rem, 1vh, 0.75rem);
+    color: var(--metas-text-dim);
+    letter-spacing: .08em;
+    margin-top: 2px;
+}
+
+/* Anel CSS puro (conic-gradient) — sem SVG, tamanho controlado só por width/height */
+.progress-ring {
+    --progress: 0;
+    --ring-color: var(--metas-orange);
+    width: clamp(56px, 8vh, 92px);
+    height: clamp(56px, 8vh, 92px);
+    min-width: 56px;
+    border-radius: 50%;
+    background: conic-gradient(var(--ring-color) calc(var(--progress) * 1%), #262626 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: background .4s ease;
+}
+.progress-ring::before {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    border-radius: 50%;
+    background: var(--metas-card);
+}
+.progress-ring.atingida { --ring-color: var(--metas-green); }
+.ring-pct {
+    position: relative;
+    z-index: 1;
+    font-size: clamp(0.72rem, 1.4vh, 1rem);
+    color: #fff;
+}
+
+.goal-footer {
+    font-size: clamp(0.64rem, 1.1vh, 0.85rem);
+    color: var(--metas-text-dim);
+    letter-spacing: .02em;
+}
+.metas-atingida {
+    color: var(--metas-green);
+    font-weight: 900;
+}

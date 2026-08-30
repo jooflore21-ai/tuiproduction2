@@ -11,12 +11,14 @@
 
 {% set current = (self.current_page()|trim) if self.current_page is defined else '' %}
 {% set nav_pages = [
-    ('producao', url_for('producao'), 'Fabricação'),
+    ('producao', url_for('producao'), 'Embalagem'),
     ('saidas', url_for('saidas'), 'Saídas'),
     ('estoque', url_for('estoque_geral'), 'Estoque'),
     ('pecas', url_for('pecas.listar_pecas'), 'Peças'),
+    ('metas', url_for('metas.painel_metas'), 'Metas'),
 ] %}
 
+{% block page_header %}
 <header class="page-header">
     <div class="page-header-title">
         {% block header_title %}{% endblock %}
@@ -32,6 +34,7 @@
         <a href="{{ url_for('landing_page') }}" class="btn-back">← Início</a>
     </div>
 </header>
+{% endblock %}
 
 {% block content %}{% endblock %}
 

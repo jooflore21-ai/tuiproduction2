@@ -1,18 +1,29 @@
+import os
+from datetime import timedelta
+
+from dotenv import load_dotenv
 from flask import Flask
+
+load_dotenv()
 
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'estoque-tui'
+    app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'estoque-tui')
+    app.permanent_session_lifetime = timedelta(hours=12)
 
     # Registra blueprints
     from app.routes import main_bp, producao_bp, saida_bp, estoque_bp
     from app.routes.pecas import pecas_bp
+    from app.routes.metas import metas_bp
+    from app.routes.admin import admin_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(producao_bp)
     app.register_blueprint(saida_bp)
     app.register_blueprint(estoque_bp)
     app.register_blueprint(pecas_bp)
+    app.register_blueprint(metas_bp)
+    app.register_blueprint(admin_bp)
 
     # Aliases de endpoint: preserva os nomes originais sem tocar nos templates
     _aliases = {
