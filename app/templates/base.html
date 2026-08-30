@@ -11,7 +11,7 @@
 
 {% set current = (self.current_page()|trim) if self.current_page is defined else '' %}
 {% set nav_pages = [
-    ('producao', url_for('producao'), 'Embalagem'),
+    ('producao', url_for('producao'), 'Fabricação'),
     ('saidas', url_for('saidas'), 'Saídas'),
     ('estoque', url_for('estoque_geral'), 'Estoque'),
     ('pecas', url_for('pecas.listar_pecas'), 'Peças'),
