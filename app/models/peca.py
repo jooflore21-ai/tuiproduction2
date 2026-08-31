@@ -368,9 +368,13 @@ def listar_pecas(apenas_ativas=True, apenas_raiz=False):
         ORDER BY p.nome
     """
 
-    rows = conn.execute(query).fetchall()
+    rows = [dict(row) for row in conn.execute(query).fetchall()]
     conn.close()
-    return [dict(row) for row in rows]
+
+    for row in rows:
+        row['em_critico'] = esta_em_critico(row, row['estoque_total'])
+
+    return rows
 
 
 def buscar_peca_por_codigo(codigo):
@@ -647,10 +651,38 @@ def consultar_movimentacoes(peca_id=None, tipo=None,
     return [dict(row) for row in rows]
 
 
-def consultar_pecas_criticas(minimo=20):
+def _threshold_critico(peca):
     """
-    Retorna peças com quantidade total < minimo.
-    Agrupa por peca_id somando todas as cores.
+    Retorna o threshold de estoque crítico conforme origem e nome da peça.
+    - FERRAMENTARIA (fabricada internamente, qualquer nome) → 150
+    - IMPORTADA com 'paralama' no nome                       → 150
+    - IMPORTADA sem 'paralama' no nome                       → 1000
+    """
+    nome = (peca['nome'] or '').lower()
+    origem = (peca['origem'] or '').upper()
+    if origem == 'FERRAMENTARIA':
+        return 150
+    if 'paralama' in nome:
+        return 150
+    return 1000  # IMPORTADA sem paralama
+
+
+def esta_em_critico(peca, estoque_atual):
+    """
+    peca precisa ter 'origem' e 'nome'. estoque_atual é passado à parte
+    porque cada consulta agrega a quantidade em estoque sob um nome de
+    campo diferente (estoque_total em listar_pecas, quantidade_total em
+    consultar_pecas_criticas).
+    """
+    return estoque_atual < _threshold_critico(peca)
+
+
+def consultar_pecas_criticas():
+    """
+    Retorna peças em estoque crítico, conforme threshold por origem/nome
+    (_threshold_critico) — não é mais um valor fixo. Agrupa por peca_id
+    somando todas as cores. Cada item vem com 'threshold_critico' (usado
+    pelo dashboard pra desenhar a barra proporcional ao limite da peça).
     """
     conn = get_connection()
 
@@ -661,13 +693,18 @@ def consultar_pecas_criticas(minimo=20):
         JOIN pecas p ON p.id = ep.peca_id
         WHERE p.ativo = 1
         GROUP BY ep.peca_id, p.codigo, p.nome, p.origem
-        HAVING SUM(ep.quantidade) < %s
         ORDER BY quantidade_total ASC
     """
 
-    rows = conn.execute(query, (minimo,)).fetchall()
+    rows = [dict(row) for row in conn.execute(query).fetchall()]
     conn.close()
-    return [dict(row) for row in rows]
+
+    criticas = []
+    for row in rows:
+        if esta_em_critico(row, row['quantidade_total']):
+            row['threshold_critico'] = _threshold_critico(row)
+            criticas.append(row)
+    return criticas
 
 
 def consultar_defeitos_para_relatorio(data_inicio=None, data_fim=None):

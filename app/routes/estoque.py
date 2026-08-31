@@ -39,7 +39,7 @@ def estoque_geral():
     # ── KPIs ─────────────────────────────────────────────────────────────────
     total_scooters = sum(sum(cores.values()) for cores in painel.values())
 
-    pecas_criticas = models.consultar_pecas_criticas(minimo=20)
+    pecas_criticas = models.consultar_pecas_criticas()
     total_criticas = len(pecas_criticas)
 
     defeitos_mes   = models.consultar_defeitos_para_relatorio()

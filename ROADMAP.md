@@ -894,3 +894,58 @@ usuário configurar as metas reais.
 
 ### Status da fila
 - [x] Fase 1 — Tela de Metas (28/08/2026)
+
+---
+
+## Ajustes pontuais — crítico por origem + ordem de modelos · Concluído (30/08/2026)
+
+### Regra de estoque crítico (antes: fixo em 20 unidades pra tudo)
+Nova regra por origem/nome em `_threshold_critico()` (app/models/peca.py):
+- FERRAMENTARIA (qualquer nome) → 150
+- IMPORTADA com "paralama" no nome → 150
+- IMPORTADA sem "paralama" no nome → 1000
+
+**Correções de nomenclatura ao ler o pedido contra o banco real** (não são
+decisões de design, o pedido só usou nomes diferentes dos que existem):
+- O pedido dizia origem `'FABRICADA'` — o banco só tem `IMPORTADA` e
+  `FERRAMENTARIA`. Tratado `FERRAMENTARIA` = peça fabricada internamente.
+- O pedido citava `app/templates/dashboard.html` — não existe; a tela de
+  KPIs/críticos é `estoque_geral.html`.
+
+**Mudança de assinatura:** `consultar_pecas_criticas(minimo=20)` perdeu o
+parâmetro `minimo` — não fazia mais sentido com threshold variável por
+peça. O filtro que antes ia no `HAVING` do SQL agora é feito em Python
+(`esta_em_critico()`), porque cada peça tem seu próprio limite. Ninguém
+no projeto chamava `/pecas/criticas?minimo=X` com valor customizado
+(conferido via grep), então não quebrou nenhum uso real.
+
+**Textos desatualizados encontrados e corrigidos** (3 lugares diziam
+"abaixo de 20 unidades" — ficariam enganosos com threshold variável):
+`estoque_geral.html` (KPI card + chart-sub) e `pecas/index.html`
+(banner + contador da tabela). Barra de progresso do card "Peças
+críticas" no dashboard também passou a ser proporcional ao
+`threshold_critico` de cada peça (antes usava `/20` fixo), e as cores
+da barra (vermelho/laranja/verde) viraram relativas ao percentual do
+threshold em vez de números absolutos fixos (`<10`/`<15`) — com
+threshold indo de 150 a 1000, os cortes absolutos antigos não faziam
+mais sentido pras duas faixas.
+
+Testado com 6 casos de fronteira direto no banco real (valores exatos
+no limite: 999/1000, 149/150 para os 3 grupos de origem), usando peças
+reais (Acelerador, Kit par paralama, Guidão) com estoque temporariamente
+ajustado e revertido ao original depois — todos os 6 bateram.
+
+### Ordem dos modelos no grid (Produção e Saídas)
+Nova ordem: TUI POP, TUI MAIS, TUI POP-S, TUI MAIS-S, TUI MAIS-LS
+(antes: TUI MAIS, TUI MAIS-S, TUI POP, TUI POP-S, TUI MAIS-LS).
+
+**Decisão confirmada com o usuário:** só `saidas.html` muda o padrão
+selecionado pra TUI POP (pedido explícito). `producao.html` só
+reordena visualmente — continua abrindo com TUI MAIS selecionado
+(`modelo_hidden` e `active` inalterados). JS de ambas as páginas usa
+`.btn-modelo` + `data-value` (não depende de posição/índice), então a
+reordenação não quebrou nenhum handler — confirmado com clique real
+disparado via JS depois da mudança.
+
+**Dados de teste:** nenhum dado real ficou alterado — os testes de
+threshold usaram valores temporários revertidos ao final.

@@ -70,7 +70,7 @@
             </strong>
             <span style="color:var(--text-muted); font-size:0.85rem;
                          margin-left:8px;">
-                &mdash; abaixo de 20 unidades
+                &mdash; abaixo do mínimo por origem
             </span>
         </div>
         <a href="{{ url_for('estoque_geral') }}"
@@ -87,7 +87,7 @@
         <a href="{{ url_for('movimentacoes_pecas') }}" class="btn" style="font-size:0.85rem; padding:8px 14px;">Ver Movimentações</a>
         <a href="{{ url_for('defeitos_pecas') }}" class="btn" style="font-size:0.85rem; padding:8px 14px;">Relatório de Defeitos</a>
         <span style="margin-left:auto; font-size:0.82rem; color:var(--text-muted);">
-            {{ pecas|length }} peças &bull; Crítico: estoque &lt; 20
+            {{ pecas|length }} peças &bull; Crítico: mínimo varia por origem
         </span>
     </div>
 
@@ -110,12 +110,12 @@
                     <tr>
                         <td>
                             {{ p.nome }}
-                            {% if p.estoque_total < 20 %}
+                            {% if p.em_critico %}
                             <span class="badge-critico">⚠ crítico</span>
                             {% endif %}
                         </td>
                         <td style="text-align:right; font-weight:600;
-                                   color: {{ 'var(--danger)' if p.estoque_total < 20 else 'var(--text)' }};">
+                                   color: {{ 'var(--danger)' if p.em_critico else 'var(--text)' }};">
                             {{ p.estoque_total }}
                         </td>
                         <td style="text-align:center;">
