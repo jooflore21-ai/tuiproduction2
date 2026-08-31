@@ -1,3 +1,8 @@
+## TPE - Entrega - Fluxo GitHub
+## Links
+Repositório: https://github.com/jooflore21-ai/tuiproduction2
+Pull Request: https://github.com/jooflore21-ai/tuiproduction2/pull/1
+
 # TUI Production Control
 
 Sistema interno de controle de produção e estoque 

@@ -275,7 +275,7 @@
             <div class="kpi-value {% if total_criticas > 0 %}danger{% else %}ok{% endif %}">
                 {{ total_criticas }}
             </div>
-            <div class="kpi-sub">abaixo de 20 unidades</div>
+            <div class="kpi-sub">abaixo do mínimo por origem</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-label">Defeitos registrados</div>
@@ -442,14 +442,14 @@
                 </span>
                 {% endif %}
             </div>
-            <div class="chart-sub">Estoque abaixo do mínimo (20 un.)</div>
+            <div class="chart-sub">Estoque abaixo do mínimo (varia por origem/peça)</div>
             {% if pecas_criticas %}
             <ul class="crit-list">
                 {% for p in pecas_criticas %}
-                {% set pct = [((p.quantidade_total / 20 * 100) | int), 100] | min %}
+                {% set pct = [((p.quantidade_total / p.threshold_critico * 100) | int), 100] | min %}
                 {% set pct = [pct, 0] | max %}
-                {% set cor_bar = '#E24B4A' if p.quantidade_total < 10
-                                 else '#BA7517' if p.quantidade_total < 15
+                {% set cor_bar = '#E24B4A' if pct < 25
+                                 else '#BA7517' if pct < 50
                                  else '#639922' %}
                 <li class="crit-item">
                     <span class="crit-nome" title="{{ p.nome }}">{{ p.nome }}</span>

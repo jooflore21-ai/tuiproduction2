@@ -13,7 +13,7 @@ CORES_PARALAMA = [
 def listar_pecas():
     """Lista todas as peças raiz com estoque atual."""
     pecas = models.listar_pecas(apenas_ativas=True, apenas_raiz=True)
-    pecas_criticas_count = len(models.consultar_pecas_criticas(minimo=20))
+    pecas_criticas_count = len(models.consultar_pecas_criticas())
     return render_template('pecas/index.html', pecas=pecas,
                            pecas_criticas_count=pecas_criticas_count)
 
@@ -152,9 +152,8 @@ def movimentacoes():
 
 @pecas_bp.route('/pecas/criticas')
 def criticas():
-    """Retorna JSON com peças em estoque crítico (< 20)."""
-    minimo = int(request.args.get('minimo', 20))
-    pecas_crit = models.consultar_pecas_criticas(minimo=minimo)
+    """Retorna JSON com peças em estoque crítico (regra por origem/nome)."""
+    pecas_crit = models.consultar_pecas_criticas()
     return jsonify({'pecas': pecas_crit})
 
 

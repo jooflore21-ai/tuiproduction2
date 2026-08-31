@@ -112,8 +112,8 @@ def saidas():
 
     form_data = {
         'motivos': ["CLIENTE", "REVENDA", "FEIRA", "BONIFICADO"],
-        'modelos': ["TUI MAIS", "TUI POP", "TUI MAIS-S",
-                    "TUI POP-S", "TUI MAIS-LS"],
+        'modelos': ["TUI POP", "TUI MAIS", "TUI POP-S",
+                    "TUI MAIS-S", "TUI MAIS-LS"],
         'cores_paralama': ["BRANCO", "PRETO", "VERMELHO", "CINZA", "AZUL", "AMARELO", "BRONZE", "PRATA", "LARANJA", "ROSA", "ROXO", "VERDE"],
         'cores_css': models.CORES_CSS,
     }
